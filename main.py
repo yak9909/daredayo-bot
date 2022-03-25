@@ -52,7 +52,7 @@ class Main(commands.Bot):
                 )
             )
             col_index += 62
-            await asyncio.sleep(5)
+            await asyncio.sleep(6)
 
 
 if __name__ == '__main__':
