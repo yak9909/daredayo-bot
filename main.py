@@ -38,6 +38,7 @@ class Main(commands.Bot):
         print(f'discord.py Version: {discord.__version__}')
         print()
         print('-'*20)
+        print("えろいて")
 
         """
         server = await self.fetch_guild(908140851442618379)
