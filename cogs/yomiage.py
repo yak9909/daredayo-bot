@@ -9,7 +9,7 @@ class Yomiage(commands.Cog):
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
         guild: discord.Guild = await self.bot.fetch_guild(908140851442618379)
-        channel: discord.TextChannel = guild.get_channel(921297377858572308)
+        channel: discord.TextChannel = await guild.fetch_channel(921297377858572308)
         if not before.channel:
             await channel.send(f"{after.channel.mention} {member.mention} おっぱい")
 
