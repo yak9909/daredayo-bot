@@ -12,6 +12,7 @@ class Yomiage(commands.Cog):
 
         if member.guild.id == 908140851442618379:
             if after.channel:
+                print(len(after.channel.members))
                 if len(after.channel.members) > 0:
                     await channel.send(f"{member.mention} が {after.channel.mention} で通話を開始しました")
             else:
