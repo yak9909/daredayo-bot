@@ -1,5 +1,8 @@
 import json
 import os
+import threading
+from flask import Flask, render_template
+
 
 
 def load_config() -> dict:
@@ -38,3 +41,19 @@ def load_cogs():
             print(f"cogs.{file.split('.')[0]}")
             Initial_Cogs.append(f"cogs.{file.split('.')[0]}")
     return Initial_Cogs
+
+
+app = Flask(__name__)
+
+@app.route('/')
+def index():
+    return render_template("index.html")
+
+
+def _start_html():
+    app.run(host='0.0.0.0', port=8080)
+
+
+def start_html():
+    https_thread = threading.Thread(target=_start_html)
+    https_thread.start()

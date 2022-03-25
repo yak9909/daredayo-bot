@@ -1,12 +1,90 @@
-from discord.ext import commands, menus
+from discord.ext import commands
 import discord
 import requests
 import json
+from modules import yktool
+
+
+def get_redirect_url(url):
+    resp = requests.head(url, allow_redirects=False)
+    if 'Location' in resp.headers:
+        return resp.headers['Location']
+    return None
 
 
 class Tools(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+    
+    @commands.command()
+    async def hextoarm(self, ctx: commands.Context):
+        pass
+    
+    @commands.command()
+    async def armtohex(self, ctx: commands.Context):
+        pass
+
+    @commands.command()
+    async def archive(self, ctx: commands.Context, video):
+        video_id = video
+        await ctx.send(f"https://youtu.be/{video_id} のアーカイブを取得します…")
+        
+        async with ctx.channel.typing():
+            archive = f"https://web.archive.org/web/2oe_/http://wayback-fakeurl.archive.org/yt/{video_id}"
+            res = get_redirect_url(archive)
+        if res:
+            embed = discord.Embed(title="アーカイブが見つかりました！", description=f"[アーカイブURL]({res})")
+            await ctx.send(embed=embed)
+        else:
+            await ctx.send("アーカイブが見つかりませんでした…")
+
+    @commands.command()
+    async def purge(self, ctx: commands.Context, arg1, arg2=None):
+        if yktool.is_moderator(ctx.author.id):
+            if not arg2:
+                async with ctx.typing():
+                    try:
+                        arg1 = int(arg1)
+                        await ctx.message.delete()
+                        deleted = await ctx.channel.purge(limit=arg1)
+                        await ctx.channel.send(f"{len(deleted)}個のメッセージを削除しました！\nこのメッセージは5秒後に削除されます", delete_after=5)
+                    except ValueError:
+                        await ctx.channel.send("削除数は半角英数字で入力してください")
+            else:
+                
+                async with ctx.channel.typing():
+                    try:
+                        arg1 = int(arg1)
+                        arg2 = int(arg2)
+                        
+                        ms1 = await ctx.channel.fetch_message(arg1)
+                        ms2 = await ctx.channel.fetch_message(arg2)
+                        messages = [msg async for msg in ctx.channel.history(before=ms1, after=ms2)] + [ms1, ms2]
+                        
+                        await ctx.message.delete()
+                        deleted = await ctx.channel.delete_messages(messages)
+                        await ctx.channel.send(f"{len(messages)}個のメッセージを削除しました！\nこのメッセージは5秒後に削除されます", delete_after=5)
+                        
+                    except discord.errors.NotFound:
+                        await ctx.send("メッセージが存在しないようです。\n正しいメッセージIDを入力してください！")
+                    except ValueError:
+                        await ctx.send("メッセージIDは半角英数字で入力してください")
+        else:
+            await ctx.send("コマンド実行に必要な権限がありません")
+
+    @purge.error
+    async def purge_error(self, ctx: commands.Context, error: discord.ext.commands.CommandError):        
+        if isinstance(error, commands.errors.MissingRequiredArgument):
+            await self.purge_help(ctx)
+        else:
+            await ctx.send(f"予想外のエラーが発生したようです。開発者に連絡してください\nErrorType: {type(error)}")
+
+    async def purge_help(self, ctx: commands.Context):
+        await ctx.send(
+            "使い方:\n```\n"
+            f"{self.bot.command_prefix}purge (<メッセージ削除数> | <削除開始メッセージID> <削除終了メッセージID>)"
+            "\n```"
+        )
 
     # メッセージを受信すると呼び出されるメソッド
     @commands.Cog.listener()

@@ -3,10 +3,13 @@ from discord.ext import commands
 import traceback
 from modules import yktool
 import os
+import math
+import asyncio
 
 
 # コンフィグを読み込む
 config = yktool.load_config()
+yktool.start_html()
 
 
 # メインクラス
@@ -35,6 +38,23 @@ class Main(commands.Bot):
         print(f'discord.py Version: {discord.__version__}')
         print()
         print('-'*20)
+
+        """
+        server = await self.fetch_guild(908140851442618379)
+        role = server.get_role(954493282438762556)
+        
+        col_index = 0
+        while True:
+            await role.edit(
+                colour=discord.Colour.from_rgb(
+                    abs(round((math.sin(col_index/360)/1)*255)),
+                    abs(round((math.sin(col_index/360+2)/1)*255)),
+                    abs(round((math.sin(col_index/360+4)/1)*255))
+                )
+            )
+            col_index += 52
+            await asyncio.sleep(3)
+        """
 
 
 if __name__ == '__main__':
