@@ -38,9 +38,7 @@ class Main(commands.Bot):
         print(f'discord.py Version: {discord.__version__}')
         print()
         print('-'*20)
-        print("えろいて")
 
-        """
         server = await self.fetch_guild(908140851442618379)
         role = server.get_role(954493282438762556)
         
@@ -53,9 +51,8 @@ class Main(commands.Bot):
                     abs(round((math.sin(col_index/360+4)/1)*255))
                 )
             )
-            col_index += 52
-            await asyncio.sleep(3)
-        """
+            col_index += 62
+            await asyncio.sleep(5)
 
 
 if __name__ == '__main__':
