@@ -39,6 +39,7 @@ class Main(commands.Bot):
         print()
         print('-'*20)
 
+        """
         server = await self.fetch_guild(908140851442618379)
         role = server.get_role(954493282438762556)
         
@@ -53,6 +54,7 @@ class Main(commands.Bot):
             )
             col_index += 62
             await asyncio.sleep(6)
+        """
 
 
 if __name__ == '__main__':

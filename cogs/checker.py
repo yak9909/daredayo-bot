@@ -11,6 +11,11 @@ def find_url(text):
     return url 
 
 
+def find_token(text):
+    token = re.findall(r'[M-Z][A-Za-z\d]{23}\.[\w-]{6}\.[\w-]{27}', text)
+    return token
+
+
 class Checker(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -46,6 +51,10 @@ class Checker(commands.Cog):
         
             # ランダムで煽る
             await message.reply(random.choice(aori_messages))
+
+        if find_token(message.content):
+            await message.delete()
+            await message.channel.send(f"{message.author.mention} Tokenが検出されたので削除しました。")
 
 
 # コグをセットアップするために必要
