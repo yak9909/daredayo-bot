@@ -55,7 +55,7 @@ class Tools(commands.Cog):
             embed = discord.Embed(title="アーカイブが見つかりました！", description=f"[アーカイブURL]({res})")
             await ctx.send(embed=embed)
         else:
-            await ctx.send("アーカイブが見つかりませんでした…")
+            await ctx.send("アーカイブは見つかりませんでした…")
 
     @commands.command()
     async def purge(self, ctx: commands.Context, arg1, arg2=None):
@@ -113,7 +113,7 @@ class Tools(commands.Cog):
             return
         
         command = self.bot.command_prefix + "hextoarm"
-        if message.content.startswith(f""):
+        if message.content.startswith(command):
             val = message.content[len(command)+1:]
             params = {
                 "hex": val,

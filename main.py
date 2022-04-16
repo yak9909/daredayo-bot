@@ -9,7 +9,6 @@ import asyncio
 
 # コンフィグを読み込む
 config = yktool.load_config()
-yktool.start_html()
 
 
 # メインクラス
@@ -58,5 +57,9 @@ class Main(commands.Bot):
 
 
 if __name__ == '__main__':
+    # html
+    yktool.start_html()
+
     bot = Main(command_prefix=config["prefix"])
     bot.run(os.environ['TOKEN'])
+    #bot.run("")
