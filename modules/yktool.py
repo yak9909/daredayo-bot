@@ -42,7 +42,6 @@ def load_cogs():
             Initial_Cogs.append(f"cogs.{file.split('.')[0]}")
     return Initial_Cogs
 
-
 app = Flask(__name__)
 
 @app.route('/')

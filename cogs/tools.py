@@ -3,6 +3,7 @@ import discord
 import requests
 import json
 from modules import yktool
+import urllib.parse
 
 
 def get_redirect_url(url):
@@ -26,6 +27,12 @@ class Tools(commands.Cog):
 
     @commands.command()
     async def archive(self, ctx: commands.Context, video):
+        if video.startswith("https://"):
+            parsed = urllib.parse.urlparse(video)
+            if parsed.netloc == "www.youtube.com":
+                video_id = urllib.parse.parse_qs(parsed.query)["v"][0]
+            else:
+                video_id = parsed.path.split("/")[-1]
         video_id = video
         await ctx.send(f"https://youtu.be/{video_id} のアーカイブを取得します…")
         
@@ -94,7 +101,7 @@ class Tools(commands.Cog):
             return
         
         command = self.bot.command_prefix + "hextoarm"
-        if message.content.startswith(command):
+        if message.content.startswith(f""):
             val = message.content[len(command)+1:]
             params = {
                 "hex": val,

@@ -59,4 +59,4 @@ class Main(commands.Bot):
 
 if __name__ == '__main__':
     bot = Main(command_prefix=config["prefix"])
-    bot.run(os.environ['TOKEN'])
+    bot.run("ODgxNTQwNTU4MjM2MDI0ODQz.YSuUnw.ucRdI1jiMkoJ19-MRR6I7CEpmBA")#os.environ['TOKEN'])
