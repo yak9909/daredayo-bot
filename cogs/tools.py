@@ -41,6 +41,7 @@ class Tools(commands.Cog):
     async def armtohex(self, ctx: commands.Context):
         pass
 
+    """ 廃止
     @commands.command()
     async def archive(self, ctx: commands.Context, video):
         video_id = video
@@ -56,6 +57,7 @@ class Tools(commands.Cog):
             await ctx.send(embed=embed)
         else:
             await ctx.send("アーカイブは見つかりませんでした…")
+    """
 
     @commands.command()
     async def purge(self, ctx: commands.Context, arg1, arg2=None):
