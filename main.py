@@ -39,7 +39,7 @@ class Main(commands.Bot):
         print()
         print('-'*20)
 
-        """
+        """ 虹色ロール
         server = await self.fetch_guild(908140851442618379)
         role = server.get_role(954493282438762556)
         
