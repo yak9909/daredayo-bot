@@ -52,9 +52,18 @@ class Checker(commands.Cog):
             # ランダムで煽る
             await message.reply(random.choice(aori_messages))
 
+        # TOKENの削除
         if find_token(message.content):
             await message.delete()
             await message.channel.send(f"{message.author.mention} Tokenが検出されたので削除しました。")
+
+        youtube_urls = [
+            x for x in find_url(message.content) if [
+                x for w in ["https://youtu.be/", "https://www.youtube.com/"] if x.startswith(w)
+            ]
+        ]
+        if youtube_urls:
+            await message.channel.send('\n'.join(youtube_urls))
 
 
 # コグをセットアップするために必要

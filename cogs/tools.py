@@ -13,6 +13,22 @@ def get_redirect_url(url):
     return None
 
 
+def get_video_archive(video_id):
+    archive = f"https://web.archive.org/web/2oe_/http://wayback-fakeurl.archive.org/yt/{video_id}"
+    return get_redirect_url(archive)
+
+
+def url2id(video_url: str):
+    video_id = None
+    parsed = urllib.parse.urlparse(video_url)
+    if parsed.netloc == "www.youtube.com":
+        video_id = urllib.parse.parse_qs(parsed.query)["v"][0]
+    else:
+        video_id = parsed.path.split("/")[-1]
+
+    return video_id
+
+
 class Tools(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -29,16 +45,12 @@ class Tools(commands.Cog):
     async def archive(self, ctx: commands.Context, video):
         video_id = video
         if video.startswith("https://"):
-            parsed = urllib.parse.urlparse(video)
-            if parsed.netloc == "www.youtube.com":
-                video_id = urllib.parse.parse_qs(parsed.query)["v"][0]
-            else:
-                video_id = parsed.path.split("/")[-1]
+            url2id(video)
+
         await ctx.send(f"https://youtu.be/{video_id} のアーカイブを取得します…")
         
         async with ctx.channel.typing():
-            archive = f"https://web.archive.org/web/2oe_/http://wayback-fakeurl.archive.org/yt/{video_id}"
-            res = get_redirect_url(archive)
+            res = get_video_archive(video_id)
         if res:
             embed = discord.Embed(title="アーカイブが見つかりました！", description=f"[アーカイブURL]({res})")
             await ctx.send(embed=embed)
