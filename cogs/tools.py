@@ -27,13 +27,13 @@ class Tools(commands.Cog):
 
     @commands.command()
     async def archive(self, ctx: commands.Context, video):
+        video_id = video
         if video.startswith("https://"):
             parsed = urllib.parse.urlparse(video)
             if parsed.netloc == "www.youtube.com":
                 video_id = urllib.parse.parse_qs(parsed.query)["v"][0]
             else:
                 video_id = parsed.path.split("/")[-1]
-        video_id = video
         await ctx.send(f"https://youtu.be/{video_id} のアーカイブを取得します…")
         
         async with ctx.channel.typing():
