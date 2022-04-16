@@ -81,7 +81,7 @@ class Checker(commands.Cog):
         search_emoji = discord.utils.find(lambda m: m.emoji == "🔍", message.reactions)
 
         if search_emoji and message.author.id == payload.user_id:
-            if [x async for x in search_emoji.users() if x.id == self.bot.application_id]:
+            if [x async for x in search_emoji.users() if x.id == self.bot.user.id]:
                 if url := find_url(message.content):
                     if len(url) == 1 and url[0].startswith(("https://www.youtube.com/", "https://youtu.be/")):
                         await message.clear_reaction("🔍")
