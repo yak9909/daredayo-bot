@@ -41,23 +41,23 @@ class Tools(commands.Cog):
     async def armtohex(self, ctx: commands.Context):
         pass
 
-    """ 廃止
     @commands.command()
     async def archive(self, ctx: commands.Context, video):
         video_id = video
         if video.startswith("https://"):
-            url2id(video)
+            video_id = url2id(video)
 
         await ctx.send(f"https://youtu.be/{video_id} のアーカイブを取得します…")
-        
+
+        # アーカイブの取得
         async with ctx.channel.typing():
-            res = get_video_archive(video_id)
-        if res:
-            embed = discord.Embed(title="アーカイブが見つかりました！", description=f"[アーカイブURL]({res})")
+            archive = get_video_archive(video_id)
+
+        if archive:
+            embed = discord.Embed(title="アーカイブが見つかりました！", description=f"[アーカイブURL]({archive})")
             await ctx.send(embed=embed)
         else:
             await ctx.send("アーカイブは見つかりませんでした…")
-    """
 
     @commands.command()
     async def purge(self, ctx: commands.Context, arg1, arg2=None):

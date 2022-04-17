@@ -62,4 +62,3 @@ if __name__ == '__main__':
 
     bot = Main(command_prefix=config["prefix"])
     bot.run(os.environ['TOKEN'])
-    #bot.run("")

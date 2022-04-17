@@ -32,6 +32,12 @@ class Checker(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
+
+        # TOKENの削除
+        if find_token(message.content):
+            await message.delete()
+            await message.channel.send(f"{message.author.mention} Tokenが検出されたので削除しました。")
+
         if message.author.bot:
             return
 
@@ -63,10 +69,8 @@ class Checker(commands.Cog):
             # ランダムで煽る
             await message.reply(random.choice(aori_messages))
 
-        # TOKENの削除
-        if find_token(message.content):
-            await message.delete()
-            await message.channel.send(f"{message.author.mention} Tokenが検出されたので削除しました。")
+        if message.content.startswith(self.bot.command_prefix):
+            return
 
         if url := find_url(message.content):
             if len(url) == 1 and url[0].startswith(("https://www.youtube.com/", "https://youtu.be/")):
@@ -84,15 +88,20 @@ class Checker(commands.Cog):
             if [x async for x in search_emoji.users() if x.id == self.bot.user.id]:
                 if url := find_url(message.content):
                     if len(url) == 1 and url[0].startswith(("https://www.youtube.com/", "https://youtu.be/")):
+                        video_id = tools.url2id(url[0])
+
                         await message.clear_reaction("🔍")
-                        await message.reply(f"{url[0]} のアーカイブを取得します…", mention_author=False)
+                        await message.reply(f"https://youtu.be/{video_id} のアーカイブを取得します…", mention_author=False)
+
+                        # アーカイブの取得
                         async with channel.typing():
-                            archive = tools.get_video_archive(tools.url2id(url[0]))
-                            if archive:
-                                embed = discord.Embed(title="アーカイブが見つかりました！", description=f"[アーカイブURL]({archive})")
-                                await channel.send(embed=embed)
-                            else:
-                                await channel.send("アーカイブは見つかりませんでした…")
+                            archive = tools.get_video_archive()
+
+                        if archive:
+                            embed = discord.Embed(title="アーカイブが見つかりました！", description=f"[アーカイブURL]({archive})")
+                            await channel.send(embed=embed)
+                        else:
+                            await channel.send("アーカイブは見つかりませんでした…")
 
 
 # コグをセットアップするために必要
