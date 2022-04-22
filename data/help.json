@@ -1,0 +1,72 @@
+{
+  "tools": {
+    "description": "便利なツール系コマンド",
+    "commands": [
+      {
+        "command": "hextoarm",
+        "description": "機械語(16進数)をARM Little Endianに変換します\n(armconverterのAPIを使用)",
+        "usage": "%prefix%hextoarm E3A01002"
+      },
+      {
+        "command": "armtohex",
+        "description": "ARM Little Endianを機械語(16進数)に変換します\n(armconverterのAPIを使用)",
+        "usage": "%prefix%armtohex\nvar addr1 = 0x100000\nldr r0, .addr1\nadd r0, #0x5"
+      },
+      {
+        "command": "archive",
+        "description": "YouTube でアクセスできなくなった動画のアーカイブを検索します\n見つからない事もあるのでご注意ください",
+        "usage": "%prefix%archive https://youtu.be/_9R1HNtNJFE"
+      },
+      {
+        "command": "purge",
+        "description": "渡された引数に従ってメッセージを削除していきます bot開発者のみ有効",
+        "usage": "%prefix%purge (<メッセージ削除数> | <削除開始メッセージID> <削除終了メッセージID>)\n\n%prefix%purge 5\n最後のメッセージから 5つのメッセージまでを削除\n\n%prefix%purge 1234 5678\nIDが1234のメッセージから IDが5678のメッセージまでを削除"
+      }
+    ]
+  },
+  "Test": {
+    "description": "ちんぽちんぽうんちんぽ",
+    "commands": [
+      {
+        "command": "ちんまんこバースト",
+        "description": "ちんまんこをバーストさせる\n※存在しないコマンドです",
+        "usage": "%prefix%ちんまんこバースト"
+      },
+      {
+        "command": "うんちんちくび",
+        "description": "うんちんをちくび化\n※存在しないコマンドです",
+        "usage": "%prefix%うんちんちくび ちくちくenable"
+      },
+      {
+        "command": "まんちゃんフォーエバー",
+        "description": "まんちゃんをフォーエバーにする\n※存在しないコマンドです",
+        "usage": "%prefix%まんちゃんフォーエバー on"
+      },
+      {
+        "command": "デッドリーうんこ",
+        "description": "デッドリーなうんこをする\n※存在しないコマンドです",
+        "usage": "%prefix%デッドリーうんこ"
+      },
+      {
+        "command": "ExtraFinalyギガントちんこ",
+        "description": "すごいちんこ\n※存在しないコマンドです",
+        "usage": "dsdddsdsdsdsds"
+      },
+      {
+        "command": "odadaaaa",
+        "description": "dwadsdads\n※存在しないコマンドです",
+        "usage": "asdsdadsdsds"
+      },
+      {
+        "command": "123132132132131",
+        "description": "12323151531\n※存在しないコマンドです",
+        "usage": "312war32r3rf"
+      },
+      {
+        "command": "213u21u88889888(()()%()%()%",
+        "description": "()%()%(%)(%)()\n※存在しないコマンドです",
+        "usage": "899090hoohooohlhl;;l::;:;:"
+      }
+    ]
+  }
+}
