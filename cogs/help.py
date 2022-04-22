@@ -67,7 +67,7 @@ class HelpView(discord.ui.View):
 
     def update(self):
         self.command_count = len(self.help_dropdown.selected["commands"])
-        self.max_page = math.floor(self.command_count/self.max_items)
+        self.max_page = math.ceil(self.command_count/self.max_items) - 1
 
         embed = discord.Embed(
             title=f"カテゴリ: {self.help_dropdown.values[0]} {self.current_page+1}/{self.max_page+1}",
