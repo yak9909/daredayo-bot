@@ -25,15 +25,11 @@ DEALINGS IN THE SOFTWARE.
 from __future__ import annotations
 
 import copy
-import time
 import asyncio
-from datetime import datetime
 from typing import (
     Any,
-    AsyncIterator,
     Callable,
     Dict,
-    Iterable,
     List,
     Optional,
     TYPE_CHECKING,
@@ -46,16 +42,15 @@ from typing import (
     runtime_checkable,
 )
 
-from .object import OLDEST_OBJECT, Object
+from .iterators import HistoryIterator
 from .context_managers import Typing
 from .enums import ChannelType
-from .errors import ClientException
+from .errors import InvalidArgument, ClientException
 from .mentions import AllowedMentions
 from .permissions import PermissionOverwrite, Permissions
 from .role import Role
 from .invite import Invite
 from .file import File
-from .http import handle_message_parameters
 from .voice_client import VoiceClient, VoiceProtocol
 from .sticker import GuildSticker, StickerItem
 from . import utils
@@ -72,7 +67,7 @@ __all__ = (
 T = TypeVar('T', bound=VoiceProtocol)
 
 if TYPE_CHECKING:
-    from typing_extensions import Self
+    from datetime import datetime
 
     from .client import Client
     from .user import ClientUser
@@ -83,7 +78,7 @@ if TYPE_CHECKING:
     from .channel import CategoryChannel
     from .embeds import Embed
     from .message import Message, MessageReference, PartialMessage
-    from .channel import TextChannel, DMChannel, GroupChannel, PartialMessageable, VoiceChannel
+    from .channel import TextChannel, DMChannel, GroupChannel, PartialMessageable
     from .threads import Thread
     from .enums import InviteTarget
     from .ui.view import View
@@ -93,11 +88,8 @@ if TYPE_CHECKING:
         GuildChannel as GuildChannelPayload,
         OverwriteType,
     )
-    from .types.snowflake import (
-        SnowflakeList,
-    )
 
-    PartialMessageableChannel = Union[TextChannel, VoiceChannel, Thread, DMChannel, PartialMessageable]
+    PartialMessageableChannel = Union[TextChannel, Thread, DMChannel, PartialMessageable]
     MessageableChannel = Union[PartialMessageableChannel, GroupChannel]
     SnowflakeTime = Union["Snowflake", datetime]
 
@@ -110,69 +102,6 @@ class _Undefined:
 
 
 _undefined: Any = _Undefined()
-
-
-async def _single_delete_strategy(messages: Iterable[Message], *, reason: Optional[str] = None):
-    for m in messages:
-        await m.delete()
-
-
-async def _purge_helper(
-    channel: Union[Thread, TextChannel, VoiceChannel],
-    *,
-    limit: Optional[int] = 100,
-    check: Callable[[Message], bool] = MISSING,
-    before: Optional[SnowflakeTime] = None,
-    after: Optional[SnowflakeTime] = None,
-    around: Optional[SnowflakeTime] = None,
-    oldest_first: Optional[bool] = False,
-    bulk: bool = True,
-    reason: Optional[str] = None,
-) -> List[Message]:
-    if check is MISSING:
-        check = lambda m: True
-
-    iterator = channel.history(limit=limit, before=before, after=after, oldest_first=oldest_first, around=around)
-    ret: List[Message] = []
-    count = 0
-
-    minimum_time = int((time.time() - 14 * 24 * 60 * 60) * 1000.0 - 1420070400000) << 22
-    strategy = channel.delete_messages if bulk else _single_delete_strategy
-
-    async for message in iterator:
-        if count == 100:
-            to_delete = ret[-100:]
-            await strategy(to_delete, reason=reason)
-            count = 0
-            await asyncio.sleep(1)
-
-        if not check(message):
-            continue
-
-        if message.id < minimum_time:
-            # older than 14 days old
-            if count == 1:
-                await ret[-1].delete()
-            elif count >= 2:
-                to_delete = ret[-count:]
-                await strategy(to_delete, reason=reason)
-
-            count = 0
-            strategy = _single_delete_strategy
-
-        count += 1
-        ret.append(message)
-
-    # Some messages remaining to poll
-    if count >= 2:
-        # more than 2 messages -> bulk delete
-        to_delete = ret[-count:]
-        await strategy(to_delete, reason=reason)
-    elif count == 1:
-        # delete a single message
-        await ret[-1].delete()
-
-    return ret
 
 
 @runtime_checkable
@@ -213,6 +142,8 @@ class User(Snowflake, Protocol):
         The user's username.
     discriminator: :class:`str`
         The user's discriminator.
+    avatar: :class:`~discord.Asset`
+        The avatar asset the user has.
     bot: :class:`bool`
         If the user is a bot account.
     """
@@ -221,6 +152,7 @@ class User(Snowflake, Protocol):
 
     name: str
     discriminator: str
+    avatar: Asset
     bot: bool
 
     @property
@@ -231,11 +163,6 @@ class User(Snowflake, Protocol):
     @property
     def mention(self) -> str:
         """:class:`str`: Returns a string that allows you to mention the given user."""
-        raise NotImplementedError
-
-    @property
-    def avatar(self) -> Optional[Asset]:
-        """Optional[:class:`~discord.Asset`]: Returns an Asset that represents the user's avatar, if present."""
         raise NotImplementedError
 
 
@@ -288,6 +215,9 @@ class _Overwrites:
         return self.type == 1
 
 
+GCH = TypeVar('GCH', bound='GuildChannel')
+
+
 class GuildChannel:
     """An ABC that details the common operations on a Discord guild channel.
 
@@ -297,7 +227,6 @@ class GuildChannel:
     - :class:`~discord.VoiceChannel`
     - :class:`~discord.CategoryChannel`
     - :class:`~discord.StageChannel`
-    - :class:`~discord.ForumChannel`
 
     This ABC must also implement :class:`~discord.abc.Snowflake`.
 
@@ -325,7 +254,7 @@ class GuildChannel:
 
     if TYPE_CHECKING:
 
-        def __init__(self, *, state: ConnectionState, guild: Guild, data: GuildChannelPayload):
+        def __init__(self, *, state: ConnectionState, guild: Guild, data: Dict[str, Any]):
             ...
 
     def __str__(self) -> str:
@@ -347,7 +276,7 @@ class GuildChannel:
         reason: Optional[str],
     ) -> None:
         if position < 0:
-            raise ValueError('Channel position cannot be less than 0.')
+            raise InvalidArgument('Channel position cannot be less than 0.')
 
         http = self._state.http
         bucket = self._sorting_bucket
@@ -427,7 +356,7 @@ class GuildChannel:
             perms = []
             for target, perm in overwrites.items():
                 if not isinstance(perm, PermissionOverwrite):
-                    raise TypeError(f'Expected PermissionOverwrite received {perm.__class__.__name__}')
+                    raise InvalidArgument(f'Expected PermissionOverwrite received {perm.__class__.__name__}')
 
                 allow, deny = perm.pair()
                 payload = {
@@ -450,7 +379,7 @@ class GuildChannel:
             pass
         else:
             if not isinstance(ch_type, ChannelType):
-                raise TypeError('type field must be of type ChannelType')
+                raise InvalidArgument('type field must be of type ChannelType')
             options['type'] = ch_type.value
 
         if options:
@@ -501,14 +430,6 @@ class GuildChannel:
     def mention(self) -> str:
         """:class:`str`: The string that allows you to mention the channel."""
         return f'<#{self.id}>'
-
-    @property
-    def jump_url(self) -> str:
-        """:class:`str`: Returns a URL that allows the client to jump to the channel.
-
-        .. versionadded:: 2.0
-        """
-        return f'https://discord.com/channels/{self.guild.id}/{self.id}'
 
     @property
     def created_at(self) -> datetime:
@@ -585,7 +506,7 @@ class GuildChannel:
 
         If there is no category then this is ``None``.
         """
-        return self.guild.get_channel(self.category_id)  # type: ignore # These are coerced into CategoryChannel
+        return self.guild.get_channel(self.category_id)  # type: ignore
 
     @property
     def permissions_synced(self) -> bool:
@@ -612,7 +533,6 @@ class GuildChannel:
         - Guild roles
         - Channel overrides
         - Member overrides
-        - Member timeout
 
         If a :class:`~discord.Role` is passed, then it checks the permissions
         someone with that role would have, which is essentially:
@@ -624,9 +544,6 @@ class GuildChannel:
 
         .. versionchanged:: 2.0
             The object passed in can now be a role object.
-
-        .. versionchanged:: 2.0
-            ``obj`` parameter is now positional-only.
 
         Parameters
         ----------
@@ -698,12 +615,6 @@ class GuildChannel:
         # Bypass all channel-specific overrides
         if base.administrator:
             return Permissions.all()
-
-        if obj.is_timed_out():
-            # Timeout leads to every permission except VIEW_CHANNEL and READ_MESSAGE_HISTORY
-            # being explicitly denied
-            base.value &= Permissions._timeout_mask()
-            return base
 
         # Apply @everyone allow/deny first since it's special
         try:
@@ -788,18 +699,11 @@ class GuildChannel:
         target: Union[Member, Role],
         *,
         reason: Optional[str] = ...,
-        **permissions: Optional[bool],
+        **permissions: bool,
     ) -> None:
         ...
 
-    async def set_permissions(
-        self,
-        target: Union[Member, Role],
-        *,
-        overwrite: Any = _undefined,
-        reason: Optional[str] = None,
-        **permissions: Optional[bool],
-    ) -> None:
+    async def set_permissions(self, target, *, overwrite=_undefined, reason=None, **permissions):
         r"""|coro|
 
         Sets the channel specific permission overwrites for a target in the
@@ -842,11 +746,6 @@ class GuildChannel:
             overwrite.read_messages = True
             await channel.set_permissions(member, overwrite=overwrite)
 
-        .. versionchanged:: 2.0
-            This function will now raise :exc:`TypeError` instead of
-            ``InvalidArgument``.
-
-
         Parameters
         -----------
         target: Union[:class:`~discord.Member`, :class:`~discord.Role`]
@@ -868,12 +767,9 @@ class GuildChannel:
             Editing channel specific permissions failed.
         ~discord.NotFound
             The role or member being edited is not part of the guild.
-        TypeError
-            The ``overwrite`` parameter was invalid or the target type was not
+        ~discord.InvalidArgument
+            The overwrite parameter invalid or the target type was not
             :class:`~discord.Role` or :class:`~discord.Member`.
-        ValueError
-            The ``overwrite`` parameter and ``positions`` parameters were both
-            unset.
         """
 
         http = self._state.http
@@ -883,18 +779,18 @@ class GuildChannel:
         elif isinstance(target, Role):
             perm_type = _Overwrites.ROLE
         else:
-            raise ValueError('target parameter must be either Member or Role')
+            raise InvalidArgument('target parameter must be either Member or Role')
 
         if overwrite is _undefined:
             if len(permissions) == 0:
-                raise ValueError('No overwrite provided.')
+                raise InvalidArgument('No overwrite provided.')
             try:
                 overwrite = PermissionOverwrite(**permissions)
             except (ValueError, TypeError):
-                raise TypeError('Invalid permissions given to keyword arguments.')
+                raise InvalidArgument('Invalid permissions given to keyword arguments.')
         else:
             if len(permissions) > 0:
-                raise TypeError('Cannot mix overwrite and keyword arguments.')
+                raise InvalidArgument('Cannot mix overwrite and keyword arguments.')
 
         # TODO: wait for event
 
@@ -902,19 +798,17 @@ class GuildChannel:
             await http.delete_channel_permissions(self.id, target.id, reason=reason)
         elif isinstance(overwrite, PermissionOverwrite):
             (allow, deny) = overwrite.pair()
-            await http.edit_channel_permissions(
-                self.id, target.id, str(allow.value), str(deny.value), perm_type, reason=reason
-            )
+            await http.edit_channel_permissions(self.id, target.id, allow.value, deny.value, perm_type, reason=reason)
         else:
-            raise TypeError('Invalid overwrite type provided.')
+            raise InvalidArgument('Invalid overwrite type provided.')
 
     async def _clone_impl(
-        self,
+        self: GCH,
         base_attrs: Dict[str, Any],
         *,
         name: Optional[str] = None,
         reason: Optional[str] = None,
-    ) -> Self:
+    ) -> GCH:
         base_attrs['permission_overwrites'] = [x._asdict() for x in self._overwrites]
         base_attrs['parent_id'] = self.category_id
         base_attrs['name'] = name or self.name
@@ -924,10 +818,10 @@ class GuildChannel:
         obj = cls(state=self._state, guild=self.guild, data=data)
 
         # temporarily add it to the cache
-        self.guild._channels[obj.id] = obj  # type: ignore # obj is a GuildChannel
+        self.guild._channels[obj.id] = obj  # type: ignore
         return obj
 
-    async def clone(self, *, name: Optional[str] = None, reason: Optional[str] = None) -> Self:
+    async def clone(self: GCH, *, name: Optional[str] = None, reason: Optional[str] = None) -> GCH:
         """|coro|
 
         Clones this channel. This creates a channel with the same properties
@@ -1008,7 +902,7 @@ class GuildChannel:
     ) -> None:
         ...
 
-    async def move(self, **kwargs: Any) -> None:
+    async def move(self, **kwargs) -> None:
         """|coro|
 
         A rich interface to help move a channel relative to other channels.
@@ -1024,10 +918,6 @@ class GuildChannel:
             This is a Discord limitation.
 
         .. versionadded:: 1.7
-
-        .. versionchanged:: 2.0
-            This function will now raise :exc:`TypeError` or
-            :exc:`ValueError` instead of ``InvalidArgument``.
 
         Parameters
         ------------
@@ -1063,10 +953,8 @@ class GuildChannel:
 
         Raises
         -------
-        ValueError
-            An invalid position was given.
-        TypeError
-            A bad mix of arguments were passed.
+        InvalidArgument
+            An invalid position was given or a bad mix of arguments were passed.
         Forbidden
             You do not have permissions to move the channel.
         HTTPException
@@ -1080,7 +968,7 @@ class GuildChannel:
         before, after = kwargs.get('before'), kwargs.get('after')
         offset = kwargs.get('offset', 0)
         if sum(bool(a) for a in (beginning, end, before, after)) > 1:
-            raise TypeError('Only one of [before, after, end, beginning] can be used.')
+            raise InvalidArgument('Only one of [before, after, end, beginning] can be used.')
 
         bucket = self._sorting_bucket
         parent_id = kwargs.get('category', MISSING)
@@ -1123,7 +1011,7 @@ class GuildChannel:
             index = next((i + 1 for i, c in enumerate(channels) if c.id == after.id), None)
 
         if index is None:
-            raise ValueError('Could not resolve appropriate move position')
+            raise InvalidArgument('Could not resolve appropriate move position')
 
         channels.insert(max((index + offset), 0), self)
         payload = []
@@ -1247,7 +1135,6 @@ class Messageable:
     The following implement this ABC:
 
     - :class:`~discord.TextChannel`
-    - :class:`~discord.VoiceChannel`
     - :class:`~discord.DMChannel`
     - :class:`~discord.GroupChannel`
     - :class:`~discord.User`
@@ -1277,7 +1164,6 @@ class Messageable:
         reference: Union[Message, MessageReference, PartialMessage] = ...,
         mention_author: bool = ...,
         view: View = ...,
-        suppress_embeds: bool = ...,
     ) -> Message:
         ...
 
@@ -1288,7 +1174,7 @@ class Messageable:
         *,
         tts: bool = ...,
         embed: Embed = ...,
-        files: Sequence[File] = ...,
+        files: List[File] = ...,
         stickers: Sequence[Union[GuildSticker, StickerItem]] = ...,
         delete_after: float = ...,
         nonce: Union[str, int] = ...,
@@ -1296,7 +1182,6 @@ class Messageable:
         reference: Union[Message, MessageReference, PartialMessage] = ...,
         mention_author: bool = ...,
         view: View = ...,
-        suppress_embeds: bool = ...,
     ) -> Message:
         ...
 
@@ -1306,7 +1191,7 @@ class Messageable:
         content: Optional[str] = ...,
         *,
         tts: bool = ...,
-        embeds: Sequence[Embed] = ...,
+        embeds: List[Embed] = ...,
         file: File = ...,
         stickers: Sequence[Union[GuildSticker, StickerItem]] = ...,
         delete_after: float = ...,
@@ -1315,7 +1200,6 @@ class Messageable:
         reference: Union[Message, MessageReference, PartialMessage] = ...,
         mention_author: bool = ...,
         view: View = ...,
-        suppress_embeds: bool = ...,
     ) -> Message:
         ...
 
@@ -1325,8 +1209,8 @@ class Messageable:
         content: Optional[str] = ...,
         *,
         tts: bool = ...,
-        embeds: Sequence[Embed] = ...,
-        files: Sequence[File] = ...,
+        embeds: List[Embed] = ...,
+        files: List[File] = ...,
         stickers: Sequence[Union[GuildSticker, StickerItem]] = ...,
         delete_after: float = ...,
         nonce: Union[str, int] = ...,
@@ -1334,28 +1218,26 @@ class Messageable:
         reference: Union[Message, MessageReference, PartialMessage] = ...,
         mention_author: bool = ...,
         view: View = ...,
-        suppress_embeds: bool = ...,
     ) -> Message:
         ...
 
     async def send(
         self,
-        content: Optional[str] = None,
+        content=None,
         *,
-        tts: bool = False,
-        embed: Optional[Embed] = None,
-        embeds: Optional[Sequence[Embed]] = None,
-        file: Optional[File] = None,
-        files: Optional[Sequence[File]] = None,
-        stickers: Optional[Sequence[Union[GuildSticker, StickerItem]]] = None,
-        delete_after: Optional[float] = None,
-        nonce: Optional[Union[str, int]] = None,
-        allowed_mentions: Optional[AllowedMentions] = None,
-        reference: Optional[Union[Message, MessageReference, PartialMessage]] = None,
-        mention_author: Optional[bool] = None,
-        view: Optional[View] = None,
-        suppress_embeds: bool = False,
-    ) -> Message:
+        tts=None,
+        embed=None,
+        embeds=None,
+        file=None,
+        files=None,
+        stickers=None,
+        delete_after=None,
+        nonce=None,
+        allowed_mentions=None,
+        reference=None,
+        mention_author=None,
+        view=None,
+    ):
         """|coro|
 
         Sends a message to the destination with the content given.
@@ -1374,10 +1256,6 @@ class Messageable:
         parameter should be used with a :class:`list` of :class:`~discord.Embed` objects.
         **Specifying both parameters will lead to an exception**.
 
-        .. versionchanged:: 2.0
-            This function will now raise :exc:`TypeError` or
-            :exc:`ValueError` instead of ``InvalidArgument``.
-
         Parameters
         ------------
         content: Optional[:class:`str`]
@@ -1386,10 +1264,6 @@ class Messageable:
             Indicates if the message should be sent using text-to-speech.
         embed: :class:`~discord.Embed`
             The rich embed for the content.
-        embeds: List[:class:`~discord.Embed`]
-            A list of embeds to upload. Must be a maximum of 10.
-
-            .. versionadded:: 2.0
         file: :class:`~discord.File`
             The file to upload.
         files: List[:class:`~discord.File`]
@@ -1425,14 +1299,12 @@ class Messageable:
             .. versionadded:: 1.6
         view: :class:`discord.ui.View`
             A Discord UI View to add to the message.
+        embeds: List[:class:`~discord.Embed`]
+            A list of embeds to upload. Must be a maximum of 10.
 
             .. versionadded:: 2.0
         stickers: Sequence[Union[:class:`~discord.GuildSticker`, :class:`~discord.StickerItem`]]
             A list of stickers to upload. Must be a maximum of 3.
-
-            .. versionadded:: 2.0
-        suppress_embeds: :class:`bool`
-            Whether to suppress embeds for the message. This sends the message without any embeds if set to ``True``.
 
             .. versionadded:: 2.0
 
@@ -1442,10 +1314,9 @@ class Messageable:
             Sending the message failed.
         ~discord.Forbidden
             You do not have the proper permissions to send the message.
-        ValueError
-            The ``files`` or ``embeds`` list is not of the appropriate size.
-        TypeError
-            You specified both ``file`` and ``files``,
+        ~discord.InvalidArgument
+            The ``files`` list is not of the appropriate size,
+            you specified both ``file`` and ``files``,
             or you specified both ``embed`` and ``embeds``,
             or the ``reference`` object is not a :class:`~discord.Message`,
             :class:`~discord.MessageReference` or :class:`~discord.PartialMessage`.
@@ -1459,48 +1330,107 @@ class Messageable:
         channel = await self._get_channel()
         state = self._state
         content = str(content) if content is not None else None
-        previous_allowed_mention = state.allowed_mentions
+
+        if embed is not None and embeds is not None:
+            raise InvalidArgument('cannot pass both embed and embeds parameter to send()')
+
+        if embed is not None:
+            embed = embed.to_dict()
+
+        elif embeds is not None:
+            if len(embeds) > 10:
+                raise InvalidArgument('embeds parameter must be a list of up to 10 elements')
+            embeds = [embed.to_dict() for embed in embeds]
 
         if stickers is not None:
-            sticker_ids: SnowflakeList = [sticker.id for sticker in stickers]
+            stickers = [sticker.id for sticker in stickers]
+
+        if allowed_mentions is not None:
+            if state.allowed_mentions is not None:
+                allowed_mentions = state.allowed_mentions.merge(allowed_mentions).to_dict()
+            else:
+                allowed_mentions = allowed_mentions.to_dict()
         else:
-            sticker_ids = MISSING
+            allowed_mentions = state.allowed_mentions and state.allowed_mentions.to_dict()
+
+        if mention_author is not None:
+            allowed_mentions = allowed_mentions or AllowedMentions().to_dict()
+            allowed_mentions['replied_user'] = bool(mention_author)
 
         if reference is not None:
             try:
-                reference_dict = reference.to_message_reference_dict()
+                reference = reference.to_message_reference_dict()
             except AttributeError:
-                raise TypeError('reference parameter must be Message, MessageReference, or PartialMessage') from None
+                raise InvalidArgument('reference parameter must be Message, MessageReference, or PartialMessage') from None
+
+        if view:
+            if not hasattr(view, '__discord_ui_view__'):
+                raise InvalidArgument(f'view parameter must be View not {view.__class__!r}')
+
+            components = view.to_components()
         else:
-            reference_dict = MISSING
+            components = None
 
-        if view and not hasattr(view, '__discord_ui_view__'):
-            raise TypeError(f'view parameter must be View not {view.__class__!r}')
+        if file is not None and files is not None:
+            raise InvalidArgument('cannot pass both file and files parameter to send()')
 
-        if suppress_embeds:
-            from .message import MessageFlags  # circular import
+        if file is not None:
+            if not isinstance(file, File):
+                raise InvalidArgument('file parameter must be File')
 
-            flags = MessageFlags._from_value(4)
+            try:
+                data = await state.http.send_files(
+                    channel.id,
+                    files=[file],
+                    allowed_mentions=allowed_mentions,
+                    content=content,
+                    tts=tts,
+                    embed=embed,
+                    embeds=embeds,
+                    nonce=nonce,
+                    message_reference=reference,
+                    stickers=stickers,
+                    components=components,
+                )
+            finally:
+                file.close()
+
+        elif files is not None:
+            if len(files) > 10:
+                raise InvalidArgument('files parameter must be a list of up to 10 elements')
+            elif not all(isinstance(file, File) for file in files):
+                raise InvalidArgument('files parameter must be a list of File')
+
+            try:
+                data = await state.http.send_files(
+                    channel.id,
+                    files=files,
+                    content=content,
+                    tts=tts,
+                    embed=embed,
+                    embeds=embeds,
+                    nonce=nonce,
+                    allowed_mentions=allowed_mentions,
+                    message_reference=reference,
+                    stickers=stickers,
+                    components=components,
+                )
+            finally:
+                for f in files:
+                    f.close()
         else:
-            flags = MISSING
-
-        with handle_message_parameters(
-            content=content,
-            tts=tts,
-            file=file if file is not None else MISSING,
-            files=files if files is not None else MISSING,
-            embed=embed if embed is not None else MISSING,
-            embeds=embeds if embeds is not None else MISSING,
-            nonce=nonce,
-            allowed_mentions=allowed_mentions,
-            message_reference=reference_dict,
-            previous_allowed_mentions=previous_allowed_mention,
-            mention_author=mention_author,
-            stickers=sticker_ids,
-            view=view,
-            flags=flags,
-        ) as params:
-            data = await state.http.send_message(channel.id, params=params)
+            data = await state.http.send_message(
+                channel.id,
+                content,
+                tts=tts,
+                embed=embed,
+                embeds=embeds,
+                nonce=nonce,
+                allowed_mentions=allowed_mentions,
+                message_reference=reference,
+                stickers=stickers,
+                components=components,
+            )
 
         ret = state.create_message(channel=channel, data=data)
         if view:
@@ -1522,9 +1452,14 @@ class Messageable:
         await self._state.http.send_typing(channel.id)
 
     def typing(self) -> Typing:
-        """Returns an asynchronous context manager that allows you to type for an indefinite period of time.
+        """Returns a context manager that allows you to type for an indefinite period of time.
 
         This is useful for denoting long computations in your bot.
+
+        .. note::
+
+            This is both a regular context manager and an async context manager.
+            This means that both ``with`` and ``async with`` work with this.
 
         Example Usage: ::
 
@@ -1534,8 +1469,6 @@ class Messageable:
 
             await channel.send('done!')
 
-        .. versionchanged:: 2.0
-            This no longer works with the ``with`` syntax, ``async with`` must be used instead.
         """
         return Typing(self)
 
@@ -1595,7 +1528,7 @@ class Messageable:
         data = await state.http.pins_from(channel.id)
         return [state.create_message(channel=channel, data=m) for m in data]
 
-    async def history(
+    def history(
         self,
         *,
         limit: Optional[int] = 100,
@@ -1603,8 +1536,8 @@ class Messageable:
         after: Optional[SnowflakeTime] = None,
         around: Optional[SnowflakeTime] = None,
         oldest_first: Optional[bool] = None,
-    ) -> AsyncIterator[Message]:
-        """Returns an :term:`asynchronous iterator` that enables receiving the destination's message history.
+    ) -> HistoryIterator:
+        """Returns an :class:`~discord.AsyncIterator` that enables receiving the destination's message history.
 
         You must have :attr:`~discord.Permissions.read_message_history` permissions to use this.
 
@@ -1620,7 +1553,7 @@ class Messageable:
 
         Flattening into a list: ::
 
-            messages = [message async for message in channel.history(limit=123)]
+            messages = await channel.history(limit=123).flatten()
             # messages is now a list of Message...
 
         All parameters are optional.
@@ -1661,101 +1594,7 @@ class Messageable:
         :class:`~discord.Message`
             The message with the message data parsed.
         """
-
-        async def _around_strategy(retrieve, around, limit):
-            if not around:
-                return []
-
-            around_id = around.id if around else None
-            data = await self._state.http.logs_from(channel.id, retrieve, around=around_id)
-
-            return data, None, limit
-
-        async def _after_strategy(retrieve, after, limit):
-            after_id = after.id if after else None
-            data = await self._state.http.logs_from(channel.id, retrieve, after=after_id)
-
-            if data:
-                if limit is not None:
-                    limit -= len(data)
-
-                after = Object(id=int(data[0]['id']))
-
-            return data, after, limit
-
-        async def _before_strategy(retrieve, before, limit):
-            before_id = before.id if before else None
-            data = await self._state.http.logs_from(channel.id, retrieve, before=before_id)
-
-            if data:
-                if limit is not None:
-                    limit -= len(data)
-
-                before = Object(id=int(data[-1]['id']))
-
-            return data, before, limit
-
-        if isinstance(before, datetime):
-            before = Object(id=utils.time_snowflake(before, high=False))
-        if isinstance(after, datetime):
-            after = Object(id=utils.time_snowflake(after, high=True))
-        if isinstance(around, datetime):
-            around = Object(id=utils.time_snowflake(around))
-
-        if oldest_first is None:
-            reverse = after is not None
-        else:
-            reverse = oldest_first
-
-        after = after or OLDEST_OBJECT
-        predicate = None
-
-        if around:
-            if limit is None:
-                raise ValueError('history does not support around with limit=None')
-            if limit > 101:
-                raise ValueError("history max limit 101 when specifying around parameter")
-
-            # Strange Discord quirk
-            limit = 100 if limit == 101 else limit
-
-            strategy, state = _around_strategy, around
-
-            if before and after:
-                predicate = lambda m: after.id < int(m['id']) < before.id
-            elif before:
-                predicate = lambda m: int(m['id']) < before.id
-            elif after:
-                predicate = lambda m: after.id < int(m['id'])
-        elif reverse:
-            strategy, state = _after_strategy, after
-            if before:
-                predicate = lambda m: int(m['id']) < before.id
-        else:
-            strategy, state = _before_strategy, before
-            if after and after != OLDEST_OBJECT:
-                predicate = lambda m: int(m['id']) > after.id
-
-        channel = await self._get_channel()
-
-        while True:
-            retrieve = min(100 if limit is None else limit, 100)
-            if retrieve < 1:
-                return
-
-            data, state, limit = await strategy(retrieve, state, limit)
-
-            # Terminate loop on next iteration; there's no data left after this
-            if len(data) < 100:
-                limit = 0
-
-            if reverse:
-                data = reversed(data)
-            if predicate:
-                data = filter(predicate, data)
-
-            for raw_message in data:
-                yield self._state.create_message(channel=channel, data=raw_message)
+        return HistoryIterator(self, limit=limit, before=before, after=after, around=around, oldest_first=oldest_first)
 
 
 class Connectable(Protocol):
@@ -1766,6 +1605,11 @@ class Connectable(Protocol):
 
     - :class:`~discord.VoiceChannel`
     - :class:`~discord.StageChannel`
+
+    Note
+    ----
+    This ABC is not decorated with :func:`typing.runtime_checkable`, so will fail :func:`isinstance`/:func:`issubclass`
+    checks.
     """
 
     __slots__ = ()
@@ -1782,16 +1626,14 @@ class Connectable(Protocol):
         *,
         timeout: float = 60.0,
         reconnect: bool = True,
-        cls: Callable[[Client, Connectable], T] = MISSING,
-        self_deaf: bool = False,
-        self_mute: bool = False,
+        cls: Callable[[Client, Connectable], T] = VoiceClient,
     ) -> T:
         """|coro|
 
-        Connects to voice and creates a :class:`~discord.VoiceClient` to establish
+        Connects to voice and creates a :class:`VoiceClient` to establish
         your connection to the voice server.
 
-        This requires :attr:`~discord.Intents.voice_states`.
+        This requires :attr:`Intents.voice_states`.
 
         Parameters
         -----------
@@ -1801,17 +1643,9 @@ class Connectable(Protocol):
             Whether the bot should automatically attempt
             a reconnect if a part of the handshake fails
             or the gateway goes down.
-        cls: Type[:class:`~discord.VoiceProtocol`]
+        cls: Type[:class:`VoiceProtocol`]
             A type that subclasses :class:`~discord.VoiceProtocol` to connect with.
             Defaults to :class:`~discord.VoiceClient`.
-        self_mute: :class:`bool`
-            Indicates if the client should be self-muted.
-
-            .. versionadded: 2.0
-        self_deaf: :class:`bool`
-            Indicates if the client should be self-deafened.
-
-            .. versionadded: 2.0
 
         Raises
         -------
@@ -1835,12 +1669,7 @@ class Connectable(Protocol):
             raise ClientException('Already connected to a voice channel.')
 
         client = state._get_client()
-
-        if cls is MISSING:
-            cls = VoiceClient
-
-        # The type checker doesn't understand that VoiceClient *is* T here.
-        voice: T = cls(client, self)  # type: ignore
+        voice = cls(client, self)
 
         if not isinstance(voice, VoiceProtocol):
             raise TypeError('Type must meet VoiceProtocol abstract base class.')
@@ -1848,7 +1677,7 @@ class Connectable(Protocol):
         state._add_voice_client(key_id, voice)
 
         try:
-            await voice.connect(timeout=timeout, reconnect=reconnect, self_deaf=self_deaf, self_mute=self_mute)
+            await voice.connect(timeout=timeout, reconnect=reconnect)
         except asyncio.TimeoutError:
             try:
                 await voice.disconnect(force=True)

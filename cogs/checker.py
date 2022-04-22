@@ -4,6 +4,7 @@ import random
 import re
 import requests
 from cogs import tools
+from cogs import help
 
 
 # 文字列内からURLを抽出
@@ -72,6 +73,9 @@ class Checker(commands.Cog):
         if message.content.startswith(self.bot.command_prefix):
             return
 
+        if message.content == "<@881540558236024843>":
+            await message.channel.send(f"helpコマンドは `{self.bot.command_prefix}help` と送信する事で実行できます", delete_after=8)
+
         if url := find_url(message.content):
             if len(url) == 1 and url[0].startswith(("https://www.youtube.com/", "https://youtu.be/")):
                 if not check_video_url(tools.url2id(url[0])):
@@ -105,5 +109,5 @@ class Checker(commands.Cog):
 
 
 # コグをセットアップするために必要
-async def setup(bot):
-    await bot.add_cog(Checker(bot))
+def setup(bot):
+    bot.add_cog(Checker(bot))

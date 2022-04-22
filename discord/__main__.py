@@ -22,10 +22,6 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 """
 
-from __future__ import annotations
-
-from typing import Optional, Tuple, Dict
-
 import argparse
 import sys
 from pathlib import Path
@@ -35,8 +31,7 @@ import pkg_resources
 import aiohttp
 import platform
 
-
-def show_version() -> None:
+def show_version():
     entries = []
 
     entries.append('- Python v{0.major}.{0.minor}.{0.micro}-{0.releaselevel}'.format(sys.version_info))
@@ -52,13 +47,9 @@ def show_version() -> None:
     entries.append('- system info: {0.system} {0.release} {0.version}'.format(uname))
     print('\n'.join(entries))
 
-
-def core(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+def core(parser, args):
     if args.version:
         show_version()
-    else:
-        parser.print_help()
-
 
 _bot_template = """#!/usr/bin/env python3
 
@@ -69,11 +60,9 @@ import config
 class Bot(commands.{base}):
     def __init__(self, **kwargs):
         super().__init__(command_prefix=commands.when_mentioned_or('{prefix}'), **kwargs)
-
-    async def setup_hook(self):
         for cog in config.cogs:
             try:
-                await self.load_extension(cog)
+                self.load_extension(cog)
             except Exception as exc:
                 print(f'Could not load extension {{cog}} due to {{exc.__class__.__name__}}: {{exc}}')
 
@@ -127,16 +116,12 @@ class {name}(commands.Cog{attrs}):
     def __init__(self, bot):
         self.bot = bot
 {extra}
-async def setup(bot):
-    await bot.add_cog({name}(bot))
+def setup(bot):
+    bot.add_cog({name}(bot))
 '''
 
 _cog_extras = '''
-    async def cog_load(self):
-        # loading logic goes here
-        pass
-
-    async def cog_unload(self):
+    def cog_unload(self):
         # clean up logic goes here
         pass
 
@@ -170,7 +155,7 @@ _cog_extras = '''
 # certain file names and directory names are forbidden
 # see: https://msdn.microsoft.com/en-us/library/windows/desktop/aa365247%28v=vs.85%29.aspx
 # although some of this doesn't apply to Linux, we might as well be consistent
-_base_table: Dict[str, Optional[str]] = {
+_base_table = {
     '<': '-',
     '>': '-',
     ':': '-',
@@ -187,36 +172,13 @@ _base_table.update((chr(i), None) for i in range(32))
 
 _translation_table = str.maketrans(_base_table)
 
-
-def to_path(parser: argparse.ArgumentParser, name: str, *, replace_spaces: bool = False) -> Path:
+def to_path(parser, name, *, replace_spaces=False):
     if isinstance(name, Path):
         return name
 
     if sys.platform == 'win32':
-        forbidden = (
-            'CON',
-            'PRN',
-            'AUX',
-            'NUL',
-            'COM1',
-            'COM2',
-            'COM3',
-            'COM4',
-            'COM5',
-            'COM6',
-            'COM7',
-            'COM8',
-            'COM9',
-            'LPT1',
-            'LPT2',
-            'LPT3',
-            'LPT4',
-            'LPT5',
-            'LPT6',
-            'LPT7',
-            'LPT8',
-            'LPT9',
-        )
+        forbidden = ('CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', \
+                     'COM8', 'COM9', 'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9')
         if len(name) <= 4 and name.upper() in forbidden:
             parser.error('invalid directory name given, use a different one')
 
@@ -225,8 +187,7 @@ def to_path(parser: argparse.ArgumentParser, name: str, *, replace_spaces: bool 
         name = name.replace(' ', '-')
     return Path(name)
 
-
-def newbot(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+def newbot(parser, args):
     new_directory = to_path(parser, args.directory) / to_path(parser, args.name)
 
     # as a note exist_ok for Path is a 3.5+ only feature
@@ -267,8 +228,7 @@ def newbot(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
 
     print('successfully made bot at', new_directory)
 
-
-def newcog(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+def newcog(parser, args):
     cog_dir = to_path(parser, args.directory)
     try:
         cog_dir.mkdir(exist_ok=True)
@@ -301,8 +261,7 @@ def newcog(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     else:
         print('successfully made cog at', directory)
 
-
-def add_newbot_args(subparser: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def add_newbot_args(subparser):
     parser = subparser.add_parser('newbot', help='creates a command bot project quickly')
     parser.set_defaults(func=newbot)
 
@@ -312,8 +271,7 @@ def add_newbot_args(subparser: argparse._SubParsersAction[argparse.ArgumentParse
     parser.add_argument('--sharded', help='whether to use AutoShardedBot', action='store_true')
     parser.add_argument('--no-git', help='do not create a .gitignore file', action='store_true', dest='no_git')
 
-
-def add_newcog_args(subparser: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def add_newcog_args(subparser):
     parser = subparser.add_parser('newcog', help='creates a new cog template quickly')
     parser.set_defaults(func=newcog)
 
@@ -324,8 +282,7 @@ def add_newcog_args(subparser: argparse._SubParsersAction[argparse.ArgumentParse
     parser.add_argument('--hide-commands', help='whether to hide all commands in the cog', action='store_true')
     parser.add_argument('--full', help='add all special methods as well', action='store_true')
 
-
-def parse_args() -> Tuple[argparse.ArgumentParser, argparse.Namespace]:
+def parse_args():
     parser = argparse.ArgumentParser(prog='discord', description='Tools for helping with discord.py')
     parser.add_argument('-v', '--version', action='store_true', help='shows the library version')
     parser.set_defaults(func=core)
@@ -335,11 +292,9 @@ def parse_args() -> Tuple[argparse.ArgumentParser, argparse.Namespace]:
     add_newcog_args(subparser)
     return parser, parser.parse_args()
 
-
-def main() -> None:
+def main():
     parser, args = parse_args()
     args.func(parser, args)
-
 
 if __name__ == '__main__':
     main()

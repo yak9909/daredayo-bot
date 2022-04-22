@@ -43,13 +43,7 @@ from .template import *
 from .widget import *
 from .object import *
 from .reaction import *
-from . import (
-    utils as utils,
-    opus as opus,
-    abc as abc,
-    ui as ui,
-    app_commands as app_commands,
-)
+from . import utils, opus, abc, ui
 from .enums import *
 from .embeds import *
 from .mentions import *
@@ -62,7 +56,6 @@ from .raw_models import *
 from .team import *
 from .sticker import *
 from .stage_instance import *
-from .scheduled_event import *
 from .interactions import *
 from .components import *
 from .threads import *
@@ -79,5 +72,3 @@ class VersionInfo(NamedTuple):
 version_info: VersionInfo = VersionInfo(major=2, minor=0, micro=0, releaselevel='alpha', serial=0)
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
-
-del logging, NamedTuple, Literal, VersionInfo

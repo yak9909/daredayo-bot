@@ -30,6 +30,7 @@ class HelpDropdown(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         self.selected = self.references[self.values[0]]
+        self.placeholder = self.values[0]
         self.view.current_page = 0
         embed = self.view.update()
         await interaction.message.edit(embed=embed, view=self.view)
@@ -53,13 +54,13 @@ class HelpView(discord.ui.View):
         self.add_item(self.help_dropdown)
 
     @discord.ui.button(label="←", disabled=True)
-    async def previous(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def previous(self, button: discord.ui.Button, interaction: discord.Interaction):
         self.current_page -= 1
         embed = self.update()
         await interaction.message.edit(embed=embed, view=self)
 
     @discord.ui.button(label="→", disabled=True)
-    async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def next(self, button: discord.ui.Button, interaction: discord.Interaction):
         self.current_page += 1
         embed = self.update()
         await interaction.message.edit(embed=embed, view=self)
@@ -111,10 +112,10 @@ class Help(commands.Cog):
             "コマンドのカテゴリーを選択してください"
         )
 
-        category_view = HelpView(self.help_path)
+        category_view = HelpView(self.help_path, 2)
 
         await ctx.send(embed=embed, view=category_view)
 
 
-async def setup(bot):
-    await bot.add_cog(Help(bot))
+def setup(bot):
+    bot.add_cog(Help(bot))

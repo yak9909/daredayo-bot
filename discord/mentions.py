@@ -23,17 +23,13 @@ DEALINGS IN THE SOFTWARE.
 """
 
 from __future__ import annotations
-from typing import Union, List, TYPE_CHECKING, Any
+from typing import Type, TypeVar, Union, List, TYPE_CHECKING, Any, Union
 
-# fmt: off
 __all__ = (
     'AllowedMentions',
 )
-# fmt: on
 
 if TYPE_CHECKING:
-    from typing_extensions import Self
-
     from .types.message import AllowedMentions as AllowedMentionsPayload
     from .abc import Snowflake
 
@@ -50,6 +46,8 @@ class _FakeBool:
 
 
 default: Any = _FakeBool()
+
+A = TypeVar('A', bound='AllowedMentions')
 
 
 class AllowedMentions:
@@ -92,13 +90,13 @@ class AllowedMentions:
         roles: Union[bool, List[Snowflake]] = default,
         replied_user: bool = default,
     ):
-        self.everyone: bool = everyone
-        self.users: Union[bool, List[Snowflake]] = users
-        self.roles: Union[bool, List[Snowflake]] = roles
-        self.replied_user: bool = replied_user
+        self.everyone = everyone
+        self.users = users
+        self.roles = roles
+        self.replied_user = replied_user
 
     @classmethod
-    def all(cls) -> Self:
+    def all(cls: Type[A]) -> A:
         """A factory method that returns a :class:`AllowedMentions` with all fields explicitly set to ``True``
 
         .. versionadded:: 1.5
@@ -106,7 +104,7 @@ class AllowedMentions:
         return cls(everyone=True, users=True, roles=True, replied_user=True)
 
     @classmethod
-    def none(cls) -> Self:
+    def none(cls: Type[A]) -> A:
         """A factory method that returns a :class:`AllowedMentions` with all fields set to ``False``
 
         .. versionadded:: 1.5

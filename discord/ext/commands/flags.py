@@ -24,17 +24,39 @@ DEALINGS IN THE SOFTWARE.
 
 from __future__ import annotations
 
-import inspect
-import re
-import sys
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Literal, Optional, Pattern, Set, Tuple, Union
+from .errors import (
+    BadFlagArgument,
+    CommandError,
+    MissingFlagArgument,
+    TooManyFlags,
+    MissingRequiredFlag,
+)
 
-from discord.utils import MISSING, maybe_coroutine, resolve_annotation
-
-from .converter import run_converters
-from .errors import BadFlagArgument, CommandError, MissingFlagArgument, MissingRequiredFlag, TooManyFlags
+from discord.utils import resolve_annotation
 from .view import StringView
+from .converter import run_converters
+
+from discord.utils import maybe_coroutine, MISSING
+from dataclasses import dataclass, field
+from typing import (
+    Dict,
+    Iterator,
+    Literal,
+    Optional,
+    Pattern,
+    Set,
+    TYPE_CHECKING,
+    Tuple,
+    List,
+    Any,
+    Type,
+    TypeVar,
+    Union,
+)
+
+import inspect
+import sys
+import re
 
 __all__ = (
     'Flag',
@@ -44,11 +66,7 @@ __all__ = (
 
 
 if TYPE_CHECKING:
-    from typing_extensions import Self
-
-    from ._types import BotT
     from .context import Context
-    from .parameters import Parameter
 
 
 @dataclass
@@ -103,7 +121,6 @@ def flag(
     default: Any = MISSING,
     max_args: int = MISSING,
     override: bool = MISSING,
-    converter: Any = MISSING,
 ) -> Any:
     """Override default functionality and parameters of the underlying :class:`FlagConverter`
     class attributes.
@@ -125,14 +142,11 @@ def flag(
     override: :class:`bool`
         Whether multiple given values overrides the previous value. The default
         value depends on the annotation given.
-    converter: Any
-        The converter to use for this flag. This replaces the annotation at
-        runtime which is transparent to type checkers.
     """
-    return Flag(name=name, aliases=aliases, default=default, max_args=max_args, override=override, annotation=converter)
+    return Flag(name=name, aliases=aliases, default=default, max_args=max_args, override=override)
 
 
-def validate_flag_name(name: str, forbidden: Set[str]) -> None:
+def validate_flag_name(name: str, forbidden: Set[str]):
     if not name:
         raise ValueError('flag names should not be empty')
 
@@ -154,8 +168,7 @@ def get_flags(namespace: Dict[str, Any], globals: Dict[str, Any], locals: Dict[s
     for name, annotation in annotations.items():
         flag = namespace.pop(name, MISSING)
         if isinstance(flag, Flag):
-            if flag.annotation is MISSING:
-                flag.annotation = annotation
+            flag.annotation = annotation
         else:
             flag = Flag(name=name, annotation=annotation, default=flag)
 
@@ -252,7 +265,7 @@ class FlagsMeta(type):
         __commands_flag_prefix__: str
 
     def __new__(
-        cls,
+        cls: Type[type],
         name: str,
         bases: Tuple[type, ...],
         attrs: Dict[str, Any],
@@ -260,7 +273,7 @@ class FlagsMeta(type):
         case_insensitive: bool = MISSING,
         delimiter: str = MISSING,
         prefix: str = MISSING,
-    ) -> Self:
+    ):
         attrs['__commands_is_flag__'] = True
 
         try:
@@ -333,10 +346,10 @@ class FlagsMeta(type):
         return type.__new__(cls, name, bases, attrs)
 
 
-async def tuple_convert_all(ctx: Context[BotT], argument: str, flag: Flag, converter: Any) -> Tuple[Any, ...]:
+async def tuple_convert_all(ctx: Context, argument: str, flag: Flag, converter: Any) -> Tuple[Any, ...]:
     view = StringView(argument)
     results = []
-    param: Parameter = ctx.current_parameter  # type: ignore
+    param: inspect.Parameter = ctx.current_parameter  # type: ignore
     while not view.eof:
         view.skip_ws()
         if view.eof:
@@ -358,10 +371,10 @@ async def tuple_convert_all(ctx: Context[BotT], argument: str, flag: Flag, conve
     return tuple(results)
 
 
-async def tuple_convert_flag(ctx: Context[BotT], argument: str, flag: Flag, converters: Any) -> Tuple[Any, ...]:
+async def tuple_convert_flag(ctx: Context, argument: str, flag: Flag, converters: Any) -> Tuple[Any, ...]:
     view = StringView(argument)
     results = []
-    param: Parameter = ctx.current_parameter  # type: ignore
+    param: inspect.Parameter = ctx.current_parameter  # type: ignore
     for converter in converters:
         view.skip_ws()
         if view.eof:
@@ -386,8 +399,8 @@ async def tuple_convert_flag(ctx: Context[BotT], argument: str, flag: Flag, conv
     return tuple(results)
 
 
-async def convert_flag(ctx: Context[BotT], argument: str, flag: Flag, annotation: Any = None) -> Any:
-    param: Parameter = ctx.current_parameter  # type: ignore
+async def convert_flag(ctx, argument: str, flag: Flag, annotation: Any = None) -> Any:
+    param: inspect.Parameter = ctx.current_parameter  # type: ignore
     annotation = annotation or flag.annotation
     try:
         origin = annotation.__origin__
@@ -403,9 +416,9 @@ async def convert_flag(ctx: Context[BotT], argument: str, flag: Flag, annotation
             # typing.List[x]
             annotation = annotation.__args__[0]
             return await convert_flag(ctx, argument, flag, annotation)
-        elif origin is Union and type(None) in annotation.__args__:
+        elif origin is Union and annotation.__args__[-1] is type(None):
             # typing.Optional[x]
-            annotation = Union[tuple(arg for arg in annotation.__args__ if arg is not type(None))]  # type: ignore
+            annotation = Union[annotation.__args__[:-1]]
             return await run_converters(ctx, annotation, argument, param)
         elif origin is dict:
             # typing.Dict[K, V] -> typing.Tuple[K, V]
@@ -417,6 +430,9 @@ async def convert_flag(ctx: Context[BotT], argument: str, flag: Flag, annotation
         raise
     except Exception as e:
         raise BadFlagArgument(flag) from e
+
+
+F = TypeVar('F', bound='FlagConverter')
 
 
 class FlagConverter(metaclass=FlagsMeta):
@@ -465,13 +481,12 @@ class FlagConverter(metaclass=FlagsMeta):
             yield (flag.name, getattr(self, flag.attribute))
 
     @classmethod
-    async def _construct_default(cls, ctx: Context[BotT]) -> Self:
-        self = cls.__new__(cls)
+    async def _construct_default(cls: Type[F], ctx: Context) -> F:
+        self: F = cls.__new__(cls)
         flags = cls.__commands_flags__
         for flag in flags.values():
             if callable(flag.default):
-                # Type checker does not understand that flag.default is a Callable
-                default = await maybe_coroutine(flag.default, ctx)  # type: ignore
+                default = await maybe_coroutine(flag.default, ctx)
                 setattr(self, flag.attribute, default)
             else:
                 setattr(self, flag.attribute, flag.default)
@@ -532,7 +547,7 @@ class FlagConverter(metaclass=FlagsMeta):
         return result
 
     @classmethod
-    async def convert(cls, ctx: Context[BotT], argument: str) -> Self:
+    async def convert(cls: Type[F], ctx: Context, argument: str) -> F:
         """|coro|
 
         The method that actually converters an argument to the flag mapping.
@@ -561,7 +576,7 @@ class FlagConverter(metaclass=FlagsMeta):
         arguments = cls.parse_flags(argument)
         flags = cls.__commands_flags__
 
-        self = cls.__new__(cls)
+        self: F = cls.__new__(cls)
         for name, flag in flags.items():
             try:
                 values = arguments[name]
@@ -570,8 +585,7 @@ class FlagConverter(metaclass=FlagsMeta):
                     raise MissingRequiredFlag(flag)
                 else:
                     if callable(flag.default):
-                        # Type checker does not understand flag.default is a Callable
-                        default = await maybe_coroutine(flag.default, ctx)  # type: ignore
+                        default = await maybe_coroutine(flag.default, ctx)
                         setattr(self, flag.attribute, default)
                     else:
                         setattr(self, flag.attribute, flag.default)
@@ -597,7 +611,7 @@ class FlagConverter(metaclass=FlagsMeta):
             values = [await convert_flag(ctx, value, flag) for value in values]
 
             if flag.cast_to_dict:
-                values = dict(values)
+                values = dict(values)  # type: ignore
 
             setattr(self, flag.attribute, values)
 

@@ -24,8 +24,8 @@ DEALINGS IN THE SOFTWARE.
 
 from __future__ import annotations
 
+from . import utils
 from .mixins import Hashable
-from .utils import snowflake_time
 
 from typing import (
     SupportsInt,
@@ -35,15 +35,11 @@ from typing import (
 
 if TYPE_CHECKING:
     import datetime
-
     SupportsIntCast = Union[SupportsInt, str, bytes, bytearray]
 
-# fmt: off
 __all__ = (
     'Object',
 )
-# fmt: on
-
 
 class Object(Hashable):
     """Represents a generic Discord object.
@@ -93,7 +89,4 @@ class Object(Hashable):
     @property
     def created_at(self) -> datetime.datetime:
         """:class:`datetime.datetime`: Returns the snowflake's creation time in UTC."""
-        return snowflake_time(self.id)
-
-
-OLDEST_OBJECT = Object(id=0)
+        return utils.snowflake_time(self.id)

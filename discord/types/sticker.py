@@ -24,9 +24,7 @@ DEALINGS IN THE SOFTWARE.
 
 from __future__ import annotations
 
-from typing import List, Literal, TypedDict, Union, Optional
-from typing_extensions import NotRequired
-
+from typing import List, Literal, TypedDict, Union
 from .snowflake import Snowflake
 from .user import User
 
@@ -53,14 +51,17 @@ class StandardSticker(BaseSticker):
     pack_id: Snowflake
 
 
-class GuildSticker(BaseSticker):
+class _GuildStickerOptional(TypedDict, total=False):
+    user: User
+
+
+class GuildSticker(BaseSticker, _GuildStickerOptional):
     type: Literal[2]
     available: bool
     guild_id: Snowflake
-    user: NotRequired[User]
 
 
-Sticker = Union[StandardSticker, GuildSticker]
+Sticker = Union[BaseSticker, StandardSticker, GuildSticker]
 
 
 class StickerPack(TypedDict):
@@ -68,15 +69,24 @@ class StickerPack(TypedDict):
     stickers: List[StandardSticker]
     name: str
     sku_id: Snowflake
-    cover_sticker_id: Optional[Snowflake]
+    cover_sticker_id: Snowflake
     description: str
-    banner_asset_id: Optional[Snowflake]
+    banner_asset_id: Snowflake
 
 
-class CreateGuildSticker(TypedDict):
+class _CreateGuildStickerOptional(TypedDict, total=False):
+    description: str
+
+
+class CreateGuildSticker(_CreateGuildStickerOptional):
     name: str
     tags: str
-    description: NotRequired[str]
+
+
+class EditGuildSticker(TypedDict, total=False):
+    name: str
+    tags: str
+    description: str
 
 
 class ListPremiumStickerPacks(TypedDict):

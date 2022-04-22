@@ -24,26 +24,21 @@ DEALINGS IN THE SOFTWARE.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, TYPE_CHECKING, Union
+from typing import Any, Dict, Optional, TYPE_CHECKING, Type, TypeVar, Union
 import re
 
 from .asset import Asset, AssetMixin
+from .errors import InvalidArgument
 from . import utils
 
-# fmt: off
 __all__ = (
     'PartialEmoji',
 )
-# fmt: on
 
 if TYPE_CHECKING:
-    from typing_extensions import Self
-
     from .state import ConnectionState
     from datetime import datetime
     from .types.message import PartialEmoji as PartialEmojiPayload
-    from .types.activity import ActivityEmoji
-
 
 class _EmojiTag:
     __slots__ = ()
@@ -52,6 +47,9 @@ class _EmojiTag:
 
     def _to_partial(self) -> PartialEmoji:
         raise NotImplementedError
+
+
+PE = TypeVar('PE', bound='PartialEmoji')
 
 
 class PartialEmoji(_EmojiTag, AssetMixin):
@@ -100,13 +98,13 @@ class PartialEmoji(_EmojiTag, AssetMixin):
         id: Optional[int]
 
     def __init__(self, *, name: str, animated: bool = False, id: Optional[int] = None):
-        self.animated: bool = animated
-        self.name: str = name
-        self.id: Optional[int] = id
+        self.animated = animated
+        self.name = name
+        self.id = id
         self._state: Optional[ConnectionState] = None
 
     @classmethod
-    def from_dict(cls, data: Union[PartialEmojiPayload, ActivityEmoji, Dict[str, Any]]) -> Self:
+    def from_dict(cls: Type[PE], data: Union[PartialEmojiPayload, Dict[str, Any]]) -> PE:
         return cls(
             animated=data.get('animated', False),
             id=utils._get_as_snowflake(data, 'id'),
@@ -114,7 +112,7 @@ class PartialEmoji(_EmojiTag, AssetMixin):
         )
 
     @classmethod
-    def from_str(cls, value: str) -> Self:
+    def from_str(cls: Type[PE], value: str) -> PE:
         """Converts a Discord string representation of an emoji to a :class:`PartialEmoji`.
 
         The formats accepted are:
@@ -161,13 +159,8 @@ class PartialEmoji(_EmojiTag, AssetMixin):
 
     @classmethod
     def with_state(
-        cls,
-        state: ConnectionState,
-        *,
-        name: str,
-        animated: bool = False,
-        id: Optional[int] = None,
-    ) -> Self:
+        cls: Type[PE], state: ConnectionState, *, name: str, animated: bool = False, id: Optional[int] = None
+    ) -> PE:
         self = cls(name=name, animated=animated, id=id)
         self._state = state
         return self
@@ -179,10 +172,10 @@ class PartialEmoji(_EmojiTag, AssetMixin):
             return f'<a:{self.name}:{self.id}>'
         return f'<:{self.name}:{self.id}>'
 
-    def __repr__(self) -> str:
+    def __repr__(self):
         return f'<{self.__class__.__name__} animated={self.animated} name={self.name!r} id={self.id}>'
 
-    def __eq__(self, other: object) -> bool:
+    def __eq__(self, other: Any) -> bool:
         if self.is_unicode_emoji():
             return isinstance(other, PartialEmoji) and self.name == other.name
 
@@ -190,7 +183,7 @@ class PartialEmoji(_EmojiTag, AssetMixin):
             return self.id == other.id
         return False
 
-    def __ne__(self, other: object) -> bool:
+    def __ne__(self, other: Any) -> bool:
         return not self.__eq__(other)
 
     def __hash__(self) -> int:
@@ -233,27 +226,7 @@ class PartialEmoji(_EmojiTag, AssetMixin):
         return f'{Asset.BASE}/emojis/{self.id}.{fmt}'
 
     async def read(self) -> bytes:
-        """|coro|
-
-        Retrieves the content of this asset as a :class:`bytes` object.
-
-        Raises
-        ------
-        DiscordException
-            There was no internal connection state.
-        HTTPException
-            Downloading the asset failed.
-        NotFound
-            The asset was deleted.
-        ValueError
-            The PartialEmoji is not a custom emoji.
-
-        Returns
-        -------
-        :class:`bytes`
-            The content of the asset.
-        """
         if self.is_unicode_emoji():
-            raise ValueError('PartialEmoji is not a custom emoji')
+            raise InvalidArgument('PartialEmoji is not a custom emoji')
 
         return await super().read()

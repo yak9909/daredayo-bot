@@ -43,12 +43,14 @@ from .errors import (
 
 from .enums import Status
 
-from typing import TYPE_CHECKING, Any, Callable, Tuple, Type, Optional, List, Dict
+from typing import TYPE_CHECKING, Any, Callable, Tuple, Type, Optional, List, Dict, TypeVar
 
 if TYPE_CHECKING:
     from .gateway import DiscordWebSocket
     from .activity import BaseActivity
-    from .flags import Intents
+    from .enums import Status
+
+    EI = TypeVar('EI', bound='EventItem')
 
 __all__ = (
     'AutoShardedClient',
@@ -75,12 +77,12 @@ class EventItem:
         self.shard: Optional['Shard'] = shard
         self.error: Optional[Exception] = error
 
-    def __lt__(self, other: object) -> bool:
+    def __lt__(self: EI, other: EI) -> bool:
         if not isinstance(other, EventItem):
             return NotImplemented
         return self.type < other.type
 
-    def __eq__(self, other: object) -> bool:
+    def __eq__(self: EI, other: EI) -> bool:
         if not isinstance(other, EventItem):
             return NotImplemented
         return self.type == other.type
@@ -95,6 +97,7 @@ class Shard:
         self._client: Client = client
         self._dispatch: Callable[..., None] = client.dispatch
         self._queue_put: Callable[[EventItem], None] = queue_put
+        self.loop: asyncio.AbstractEventLoop = self._client.loop
         self._disconnect: bool = False
         self._reconnect = client._reconnect
         self._backoff: ExponentialBackoff = ExponentialBackoff()
@@ -114,7 +117,7 @@ class Shard:
         return self.ws.shard_id  # type: ignore
 
     def launch(self) -> None:
-        self._task = self._client.loop.create_task(self.worker())
+        self._task = self.loop.create_task(self.worker())
 
     def _cancel_task(self) -> None:
         if self._task is not None and not self._task.done():
@@ -317,10 +320,10 @@ class AutoShardedClient(Client):
     if TYPE_CHECKING:
         _connection: AutoShardedConnectionState
 
-    def __init__(self, *args: Any, intents: Intents, **kwargs: Any) -> None:
+    def __init__(self, *args: Any, loop: Optional[asyncio.AbstractEventLoop] = None, **kwargs: Any) -> None:
         kwargs.pop('shard_id', None)
         self.shard_ids: Optional[List[int]] = kwargs.pop('shard_ids', None)
-        super().__init__(*args, intents=intents, **kwargs)
+        super().__init__(*args, loop=loop, **kwargs)
 
         if self.shard_ids is not None:
             if self.shard_count is None:
@@ -333,6 +336,7 @@ class AutoShardedClient(Client):
         self.__shards = {}
         self._connection._get_websocket = self._get_websocket
         self._connection._get_client = lambda: self
+        self.__queue = asyncio.PriorityQueue()
 
     def _get_websocket(self, guild_id: Optional[int] = None, *, shard_id: Optional[int] = None) -> DiscordWebSocket:
         if shard_id is None:
@@ -346,6 +350,7 @@ class AutoShardedClient(Client):
             handlers=self._handlers,
             hooks=self._hooks,
             http=self.http,
+            loop=self.loop,
             **options,
         )
 
@@ -369,19 +374,8 @@ class AutoShardedClient(Client):
         """
         return [(shard_id, shard.ws.latency) for shard_id, shard in self.__shards.items()]
 
-    def get_shard(self, shard_id: int, /) -> Optional[ShardInfo]:
-        """
-        Gets the shard information at a given shard ID or ``None`` if not found.
-
-        .. versionchanged:: 2.0
-
-            ``shard_id`` parameter is now positional-only.
-
-        Returns
-        --------
-        Optional[:class:`ShardInfo`]
-            Information about the shard with given ID. ``None`` if not found.
-        """
+    def get_shard(self, shard_id: int) -> Optional[ShardInfo]:
+        """Optional[:class:`ShardInfo`]: Gets the shard information at a given shard ID or ``None`` if not found."""
         try:
             parent = self.__shards[shard_id]
         except KeyError:
@@ -409,7 +403,6 @@ class AutoShardedClient(Client):
 
     async def launch_shards(self) -> None:
         if self.shard_count is None:
-            self.shard_count: int
             self.shard_count, gateway = await self.http.get_bot_gateway()
         else:
             gateway = await self.http.get_gateway()
@@ -424,10 +417,6 @@ class AutoShardedClient(Client):
             await self.launch_shard(gateway, shard_id, initial=initial)
 
         self._connection.shards_launched.set()
-
-    async def _async_setup_hook(self) -> None:
-        await super()._async_setup_hook()
-        self.__queue = asyncio.PriorityQueue()
 
     async def connect(self, *, reconnect: bool = True) -> None:
         self._reconnect = reconnect
@@ -481,7 +470,7 @@ class AutoShardedClient(Client):
         *,
         activity: Optional[BaseActivity] = None,
         status: Optional[Status] = None,
-        shard_id: Optional[int] = None,
+        shard_id: int = None,
     ) -> None:
         """|coro|
 
@@ -494,10 +483,6 @@ class AutoShardedClient(Client):
 
         .. versionchanged:: 2.0
             Removed the ``afk`` keyword-only parameter.
-
-        .. versionchanged:: 2.0
-            This function will now raise :exc:`TypeError` instead of
-            ``InvalidArgument``.
 
         Parameters
         ----------
@@ -513,7 +498,7 @@ class AutoShardedClient(Client):
 
         Raises
         ------
-        TypeError
+        InvalidArgument
             If the ``activity`` parameter is not of proper type.
         """
 

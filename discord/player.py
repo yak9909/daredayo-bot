@@ -36,21 +36,19 @@ import sys
 import re
 import io
 
-from typing import Any, Callable, Generic, IO, Optional, TYPE_CHECKING, Tuple, TypeVar, Union
+from typing import Any, Callable,  Generic, IO, Optional, TYPE_CHECKING, Tuple, Type, TypeVar, Union
 
-from .enums import SpeakingState
 from .errors import ClientException
 from .opus import Encoder as OpusEncoder
 from .oggparse import OggStream
 from .utils import MISSING
 
 if TYPE_CHECKING:
-    from typing_extensions import Self
-
     from .voice_client import VoiceClient
 
 
 AT = TypeVar('AT', bound='AudioSource')
+FT = TypeVar('FT', bound='FFmpegOpusAudio')
 
 _log = logging.getLogger(__name__)
 
@@ -69,7 +67,6 @@ if sys.platform != 'win32':
     CREATE_NO_WINDOW = 0
 else:
     CREATE_NO_WINDOW = 0x08000000
-
 
 class AudioSource:
     """Represents an audio stream.
@@ -117,7 +114,6 @@ class AudioSource:
     def __del__(self) -> None:
         self.cleanup()
 
-
 class PCMAudio(AudioSource):
     """Represents raw 16-bit 48KHz stereo PCM audio source.
 
@@ -126,7 +122,6 @@ class PCMAudio(AudioSource):
     stream: :term:`py:file object`
         A file-like object that reads byte data representing raw PCM.
     """
-
     def __init__(self, stream: io.BufferedIOBase) -> None:
         self.stream: io.BufferedIOBase = stream
 
@@ -135,7 +130,6 @@ class PCMAudio(AudioSource):
         if len(ret) != OpusEncoder.FRAME_SIZE:
             return b''
         return ret
-
 
 class FFmpegAudio(AudioSource):
     """Represents an FFmpeg (or AVConv) based AudioSource.
@@ -146,14 +140,7 @@ class FFmpegAudio(AudioSource):
     .. versionadded:: 1.3
     """
 
-    def __init__(
-        self,
-        source: Union[str, io.BufferedIOBase],
-        *,
-        executable: str = 'ffmpeg',
-        args: Any,
-        **subprocess_kwargs: Any,
-    ):
+    def __init__(self, source: Union[str, io.BufferedIOBase], *, executable: str = 'ffmpeg', args: Any, **subprocess_kwargs: Any):
         piping = subprocess_kwargs.get('stdin') == subprocess.PIPE
         if piping and isinstance(source, str):
             raise TypeError("parameter conflict: 'source' parameter cannot be a string when piping to stdin")
@@ -163,8 +150,8 @@ class FFmpegAudio(AudioSource):
         kwargs.update(subprocess_kwargs)
 
         self._process: subprocess.Popen = self._spawn_process(args, **kwargs)
-        self._stdout: IO[bytes] = self._process.stdout  # type: ignore # process stdout is explicitly set
-        self._stdin: Optional[IO[bytes]] = None
+        self._stdout: IO[bytes] = self._process.stdout  # type: ignore
+        self._stdin: Optional[IO[Bytes]] = None
         self._pipe_thread: Optional[threading.Thread] = None
 
         if piping:
@@ -204,6 +191,7 @@ class FFmpegAudio(AudioSource):
         else:
             _log.info('ffmpeg process %s successfully terminated with return code of %s.', proc.pid, proc.returncode)
 
+
     def _pipe_writer(self, source: io.BufferedIOBase) -> None:
         while self._process:
             # arbitrarily large read size
@@ -212,8 +200,7 @@ class FFmpegAudio(AudioSource):
                 self._process.terminate()
                 return
             try:
-                if self._stdin is not None:
-                    self._stdin.write(data)
+                self._stdin.write(data)
             except Exception:
                 _log.debug('Write error for %s, this is probably not a problem', self, exc_info=True)
                 # at this point the source data is either exhausted or the process is fubar
@@ -223,7 +210,6 @@ class FFmpegAudio(AudioSource):
     def cleanup(self) -> None:
         self._kill_process()
         self._process = self._stdout = self._stdin = MISSING
-
 
 class FFmpegPCMAudio(FFmpegAudio):
     """An audio source from FFmpeg (or AVConv).
@@ -268,7 +254,7 @@ class FFmpegPCMAudio(FFmpegAudio):
         pipe: bool = False,
         stderr: Optional[IO[str]] = None,
         before_options: Optional[str] = None,
-        options: Optional[str] = None,
+        options: Optional[str] = None
     ) -> None:
         args = []
         subprocess_kwargs = {'stdin': subprocess.PIPE if pipe else subprocess.DEVNULL, 'stderr': stderr}
@@ -295,7 +281,6 @@ class FFmpegPCMAudio(FFmpegAudio):
 
     def is_opus(self) -> bool:
         return False
-
 
 class FFmpegOpusAudio(FFmpegAudio):
     """An audio source from FFmpeg (or AVConv).
@@ -362,14 +347,15 @@ class FFmpegOpusAudio(FFmpegAudio):
         self,
         source: Union[str, io.BufferedIOBase],
         *,
-        bitrate: Optional[int] = None,
+        bitrate: int = 128,
         codec: Optional[str] = None,
         executable: str = 'ffmpeg',
-        pipe: bool = False,
-        stderr: Optional[IO[bytes]] = None,
-        before_options: Optional[str] = None,
-        options: Optional[str] = None,
+        pipe=False,
+        stderr=None,
+        before_options=None,
+        options=None,
     ) -> None:
+
         args = []
         subprocess_kwargs = {'stdin': subprocess.PIPE if pipe else subprocess.DEVNULL, 'stderr': stderr}
 
@@ -380,9 +366,7 @@ class FFmpegOpusAudio(FFmpegAudio):
         args.append('-' if pipe else source)
 
         codec = 'copy' if codec in ('opus', 'libopus') else 'libopus'
-        bitrate = bitrate if bitrate is not None else 128
 
-        # fmt: off
         args.extend(('-map_metadata', '-1',
                      '-f', 'opus',
                      '-c:a', codec,
@@ -390,7 +374,6 @@ class FFmpegOpusAudio(FFmpegAudio):
                      '-ac', '2',
                      '-b:a', f'{bitrate}k',
                      '-loglevel', 'warning'))
-        # fmt: on
 
         if isinstance(options, str):
             args.extend(shlex.split(options))
@@ -402,12 +385,12 @@ class FFmpegOpusAudio(FFmpegAudio):
 
     @classmethod
     async def from_probe(
-        cls,
+        cls: Type[FT],
         source: str,
         *,
         method: Optional[Union[str, Callable[[str, str], Tuple[Optional[str], Optional[int]]]]] = None,
         **kwargs: Any,
-    ) -> Self:
+    ) -> FT:
         """|coro|
 
         A factory method that creates a :class:`FFmpegOpusAudio` after probing
@@ -465,7 +448,7 @@ class FFmpegOpusAudio(FFmpegAudio):
 
         executable = kwargs.get('executable')
         codec, bitrate = await cls.probe(source, method=method, executable=executable)
-        return cls(source, bitrate=bitrate, codec=codec, **kwargs)
+        return cls(source, bitrate=bitrate, codec=codec, **kwargs)  # type: ignore
 
     @classmethod
     async def probe(
@@ -497,7 +480,7 @@ class FFmpegOpusAudio(FFmpegAudio):
 
         Returns
         ---------
-        Optional[Tuple[Optional[:class:`str`], :class:`int`]]
+        Optional[Tuple[Optional[:class:`str`], Optional[:class:`int`]]]
             A 2-tuple with the codec and bitrate of the input source.
         """
 
@@ -517,12 +500,13 @@ class FFmpegOpusAudio(FFmpegAudio):
             probefunc = method
             fallback = cls._probe_codec_fallback
         else:
-            raise TypeError(f"Expected str or callable for parameter 'probe', not '{method.__class__.__name__}'")
+            raise TypeError("Expected str or callable for parameter 'probe', " \
+                            f"not '{method.__class__.__name__}'")
 
         codec = bitrate = None
-        loop = asyncio.get_running_loop()
+        loop = asyncio.get_event_loop()
         try:
-            codec, bitrate = await loop.run_in_executor(None, lambda: probefunc(source, executable))
+            codec, bitrate = await loop.run_in_executor(None, lambda: probefunc(source, executable))  # type: ignore
         except Exception:
             if not fallback:
                 _log.exception("Probe '%s' using '%s' failed", method, executable)
@@ -530,7 +514,7 @@ class FFmpegOpusAudio(FFmpegAudio):
 
             _log.exception("Probe '%s' using '%s' failed, trying fallback", method, executable)
             try:
-                codec, bitrate = await loop.run_in_executor(None, lambda: fallback(source, executable))
+                codec, bitrate = await loop.run_in_executor(None, lambda: fallback(source, executable))  # type: ignore
             except Exception:
                 _log.exception("Fallback probe using '%s' failed", executable)
             else:
@@ -553,13 +537,13 @@ class FFmpegOpusAudio(FFmpegAudio):
 
             codec = streamdata.get('codec_name')
             bitrate = int(streamdata.get('bit_rate', 0))
-            bitrate = max(round(bitrate / 1000), 512)
+            bitrate = max(round(bitrate/1000), 512)
 
         return codec, bitrate
 
     @staticmethod
     def _probe_codec_fallback(source, executable: str = 'ffmpeg') -> Tuple[Optional[str], Optional[int]]:
-        args = [executable, '-hide_banner', '-i', source]
+        args = [executable, '-hide_banner', '-i',  source]
         proc = subprocess.Popen(args, creationflags=CREATE_NO_WINDOW, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         out, _ = proc.communicate(timeout=20)
         output = out.decode('utf8')
@@ -580,7 +564,6 @@ class FFmpegOpusAudio(FFmpegAudio):
 
     def is_opus(self) -> bool:
         return True
-
 
 class PCMVolumeTransformer(AudioSource, Generic[AT]):
     """Transforms a previous :class:`AudioSource` to have volume controls.
@@ -630,17 +613,10 @@ class PCMVolumeTransformer(AudioSource, Generic[AT]):
         ret = self.original.read()
         return audioop.mul(ret, 2, min(self._volume, 2.0))
 
-
 class AudioPlayer(threading.Thread):
     DELAY: float = OpusEncoder.FRAME_LENGTH / 1000.0
 
-    def __init__(
-        self,
-        source: AudioSource,
-        client: VoiceClient,
-        *,
-        after: Optional[Callable[[Optional[Exception]], Any]] = None,
-    ) -> None:
+    def __init__(self, source: AudioSource, client: VoiceClient, *, after=None):
         threading.Thread.__init__(self)
         self.daemon: bool = True
         self.source: AudioSource = source
@@ -649,7 +625,7 @@ class AudioPlayer(threading.Thread):
 
         self._end: threading.Event = threading.Event()
         self._resumed: threading.Event = threading.Event()
-        self._resumed.set()  # we are not paused
+        self._resumed.set() # we are not paused
         self._current_error: Optional[Exception] = None
         self._connected: threading.Event = client._connected
         self._lock: threading.Lock = threading.Lock()
@@ -663,7 +639,7 @@ class AudioPlayer(threading.Thread):
 
         # getattr lookup speed ups
         play_audio = self.client.send_audio_packet
-        self._speak(SpeakingState.voice)
+        self._speak(True)
 
         while not self._end.is_set():
             # are we paused?
@@ -699,8 +675,8 @@ class AudioPlayer(threading.Thread):
             self._current_error = exc
             self.stop()
         finally:
-            self._call_after()
             self.source.cleanup()
+            self._call_after()
 
     def _call_after(self) -> None:
         error = self._current_error
@@ -721,19 +697,19 @@ class AudioPlayer(threading.Thread):
     def stop(self) -> None:
         self._end.set()
         self._resumed.set()
-        self._speak(SpeakingState.none)
+        self._speak(False)
 
     def pause(self, *, update_speaking: bool = True) -> None:
         self._resumed.clear()
         if update_speaking:
-            self._speak(SpeakingState.none)
+            self._speak(False)
 
     def resume(self, *, update_speaking: bool = True) -> None:
-        self.loops: int = 0
-        self._start: float = time.perf_counter()
+        self.loops = 0
+        self._start = time.perf_counter()
         self._resumed.set()
         if update_speaking:
-            self._speak(SpeakingState.voice)
+            self._speak(True)
 
     def is_playing(self) -> bool:
         return self._resumed.is_set() and not self._end.is_set()
@@ -747,8 +723,8 @@ class AudioPlayer(threading.Thread):
             self.source = source
             self.resume(update_speaking=False)
 
-    def _speak(self, speaking: SpeakingState) -> None:
+    def _speak(self, speaking: bool) -> None:
         try:
-            asyncio.run_coroutine_threadsafe(self.client.ws.speak(speaking), self.client.client.loop)
+            asyncio.run_coroutine_threadsafe(self.client.ws.speak(speaking), self.client.loop)
         except Exception as e:
             _log.info("Speaking call in player failed: %s", e)

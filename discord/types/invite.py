@@ -25,9 +25,7 @@ DEALINGS IN THE SOFTWARE.
 from __future__ import annotations
 
 from typing import Literal, Optional, TypedDict, Union
-from typing_extensions import NotRequired
 
-from .scheduled_event import GuildScheduledEvent
 from .snowflake import Snowflake
 from .guild import InviteGuild, _GuildPreviewUnique
 from .channel import PartialChannel
@@ -35,6 +33,14 @@ from .user import PartialUser
 from .appinfo import PartialAppInfo
 
 InviteTargetType = Literal[1, 2]
+
+
+class _InviteOptional(TypedDict, total=False):
+    guild: InviteGuild
+    inviter: PartialUser
+    target_user: PartialUser
+    target_type: InviteTargetType
+    target_application: PartialAppInfo
 
 
 class _InviteMetadata(TypedDict, total=False):
@@ -48,7 +54,6 @@ class _InviteMetadata(TypedDict, total=False):
 
 class VanityInvite(_InviteMetadata):
     code: Optional[str]
-    revoked: NotRequired[bool]
 
 
 class IncompleteInvite(_InviteMetadata):
@@ -56,20 +61,23 @@ class IncompleteInvite(_InviteMetadata):
     channel: PartialChannel
 
 
-class Invite(IncompleteInvite, total=False):
-    guild: InviteGuild
-    inviter: PartialUser
-    target_user: PartialUser
-    target_type: InviteTargetType
-    target_application: PartialAppInfo
-    guild_scheduled_event: GuildScheduledEvent
+class Invite(IncompleteInvite, _InviteOptional):
+    ...
 
 
 class InviteWithCounts(Invite, _GuildPreviewUnique):
     ...
 
 
-class GatewayInviteCreate(TypedDict):
+class _GatewayInviteCreateOptional(TypedDict, total=False):
+    guild_id: Snowflake
+    inviter: PartialUser
+    target_type: InviteTargetType
+    target_user: PartialUser
+    target_application: PartialAppInfo
+
+
+class GatewayInviteCreate(_GatewayInviteCreateOptional):
     channel_id: Snowflake
     code: str
     created_at: str
@@ -77,17 +85,15 @@ class GatewayInviteCreate(TypedDict):
     max_uses: int
     temporary: bool
     uses: bool
+
+
+class _GatewayInviteDeleteOptional(TypedDict, total=False):
     guild_id: Snowflake
-    inviter: NotRequired[PartialUser]
-    target_type: NotRequired[InviteTargetType]
-    target_user: NotRequired[PartialUser]
-    target_application: NotRequired[PartialAppInfo]
 
 
-class GatewayInviteDelete(TypedDict):
+class GatewayInviteDelete(_GatewayInviteDeleteOptional):
     channel_id: Snowflake
     code: str
-    guild_id: NotRequired[Snowflake]
 
 
 GatewayInvite = Union[GatewayInviteCreate, GatewayInviteDelete]

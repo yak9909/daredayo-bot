@@ -40,12 +40,14 @@ if TYPE_CHECKING:
 __all__ = (
     'DiscordException',
     'ClientException',
+    'NoMoreItems',
     'GatewayNotFound',
     'HTTPException',
     'Forbidden',
     'NotFound',
     'DiscordServerError',
     'InvalidData',
+    'InvalidArgument',
     'LoginFailure',
     'ConnectionClosed',
     'PrivilegedIntentsRequired',
@@ -67,6 +69,12 @@ class ClientException(DiscordException):
 
     These are usually for exceptions that happened due to user input.
     """
+
+    pass
+
+
+class NoMoreItems(DiscordException):
+    """Exception that is raised when an async iteration operation has no more items."""
 
     pass
 
@@ -117,7 +125,7 @@ class HTTPException(DiscordException):
 
     def __init__(self, response: _ResponseType, message: Optional[Union[str, Dict[str, Any]]]):
         self.response: _ResponseType = response
-        self.status: int = response.status  # type: ignore # This attribute is filled by the library even if using requests
+        self.status: int = response.status  # type: ignore
         self.code: int
         self.text: str
         if isinstance(message, dict):
@@ -178,6 +186,18 @@ class InvalidData(ClientException):
     pass
 
 
+class InvalidArgument(ClientException):
+    """Exception that's raised when an argument to a function
+    is invalid some way (e.g. wrong value or wrong type).
+
+    This could be considered the analogous of ``ValueError`` and
+    ``TypeError`` except inherited from :exc:`ClientException` and thus
+    :exc:`DiscordException`.
+    """
+
+    pass
+
+
 class LoginFailure(ClientException):
     """Exception that's raised when the :meth:`Client.login` function
     fails to log you in from improper credentials or some other misc.
@@ -220,7 +240,6 @@ class PrivilegedIntentsRequired(ClientException):
 
     - :attr:`Intents.members`
     - :attr:`Intents.presences`
-    - :attr:`Intents.message_content`
 
     Attributes
     -----------

@@ -23,10 +23,7 @@ DEALINGS IN THE SOFTWARE.
 """
 
 from __future__ import annotations
-
 from typing import Literal, Optional, TypedDict
-from typing_extensions import NotRequired
-
 from .snowflake import Snowflake
 from .user import User
 from .channel import PartialChannel
@@ -38,22 +35,28 @@ class SourceGuild(TypedDict):
     icon: str
 
 
+class _WebhookOptional(TypedDict, total=False):
+    guild_id: Snowflake
+    user: User
+    token: str
+
+
 WebhookType = Literal[1, 2, 3]
 
 
-class FollowerWebhook(TypedDict):
+class _FollowerWebhookOptional(TypedDict, total=False):
+    source_channel: PartialChannel
+    source_guild: SourceGuild
+
+
+class FollowerWebhook(_FollowerWebhookOptional):
     channel_id: Snowflake
     webhook_id: Snowflake
-    source_channel: NotRequired[PartialChannel]
-    source_guild: NotRequired[SourceGuild]
 
 
-class PartialWebhook(TypedDict):
+class PartialWebhook(_WebhookOptional):
     id: Snowflake
     type: WebhookType
-    guild_id: NotRequired[Snowflake]
-    user: NotRequired[User]
-    token: NotRequired[str]
 
 
 class _FullWebhook(TypedDict, total=False):

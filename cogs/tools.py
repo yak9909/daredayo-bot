@@ -166,5 +166,5 @@ class Tools(commands.Cog):
 
 
 # コグをセットアップするために必要
-async def setup(bot):
-    await bot.add_cog(Tools(bot))
+def setup(bot):
+    bot.add_cog(Tools(bot))

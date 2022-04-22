@@ -44,7 +44,7 @@ import socket
 import logging
 import struct
 import threading
-from typing import Any, Callable, List, Optional, TYPE_CHECKING, Tuple, Union
+from typing import Any, Callable, List, Optional, TYPE_CHECKING, Tuple
 
 from . import opus, utils
 from .backoff import ExponentialBackoff
@@ -59,7 +59,6 @@ if TYPE_CHECKING:
     from .state import ConnectionState
     from .user import ClientUser
     from .opus import Encoder
-    from .channel import StageChannel, VoiceChannel
     from . import abc
 
     from .types.voice import (
@@ -67,16 +66,12 @@ if TYPE_CHECKING:
         VoiceServerUpdate as VoiceServerUpdatePayload,
         SupportedModes,
     )
-
-    VocalGuildChannel = Union[VoiceChannel, StageChannel]
-
+    
 
 has_nacl: bool
 
 try:
     import nacl.secret  # type: ignore
-    import nacl.utils  # type: ignore
-
     has_nacl = True
 except ImportError:
     has_nacl = False
@@ -87,8 +82,9 @@ __all__ = (
 )
 
 
-_log = logging.getLogger(__name__)
 
+
+_log = logging.getLogger(__name__)
 
 class VoiceProtocol:
     """A class that represents the Discord voice protocol.
@@ -149,7 +145,7 @@ class VoiceProtocol:
         """
         raise NotImplementedError
 
-    async def connect(self, *, timeout: float, reconnect: bool, self_deaf: bool = False, self_mute: bool = False) -> None:
+    async def connect(self, *, timeout: float, reconnect: bool) -> None:
         """|coro|
 
         An abstract method called when the client initiates the connection request.
@@ -169,14 +165,6 @@ class VoiceProtocol:
             The timeout for the connection.
         reconnect: :class:`bool`
             Whether reconnection is expected.
-        self_mute: :class:`bool`
-            Indicates if the client should be self-muted.
-
-            .. versionadded: 2.0
-        self_deaf: :class:`bool`
-            Indicates if the client should be self-deafened.
-
-            .. versionadded: 2.0
         """
         raise NotImplementedError
 
@@ -207,7 +195,6 @@ class VoiceProtocol:
         key_id, _ = self.channel._get_voice_client_key()
         self.client._connection._remove_voice_client(key_id)
 
-
 class VoiceClient(VoiceProtocol):
     """Represents a Discord voice connection.
 
@@ -229,17 +216,16 @@ class VoiceClient(VoiceProtocol):
         The voice connection token.
     endpoint: :class:`str`
         The endpoint we are connecting to.
-    channel: Union[:class:`VoiceChannel`, :class:`StageChannel`]
+    channel: :class:`abc.Connectable`
         The voice channel connected to.
+    loop: :class:`asyncio.AbstractEventLoop`
+        The event loop that the voice client is running on.
     """
-
-    channel: VocalGuildChannel
     endpoint_ip: str
     voice_port: int
-    ip: str
-    port: int
     secret_key: List[int]
     ssrc: int
+
 
     def __init__(self, client: Client, channel: abc.Connectable):
         if not has_nacl:
@@ -248,7 +234,6 @@ class VoiceClient(VoiceProtocol):
         super().__init__(client, channel)
         state = client._connection
         self.token: str = MISSING
-        self.server_id: int = MISSING
         self.socket = MISSING
         self.loop: asyncio.AbstractEventLoop = state.loop
         self._state: ConnectionState = state
@@ -271,7 +256,7 @@ class VoiceClient(VoiceProtocol):
         self._lite_nonce: int = 0
         self.ws: DiscordVoiceWebSocket = MISSING
 
-    warn_nacl: bool = not has_nacl
+    warn_nacl = not has_nacl
     supported_modes: Tuple[SupportedModes, ...] = (
         'xsalsa20_poly1305_lite',
         'xsalsa20_poly1305_suffix',
@@ -279,16 +264,16 @@ class VoiceClient(VoiceProtocol):
     )
 
     @property
-    def guild(self) -> Guild:
-        """:class:`Guild`: The guild we're connected to."""
-        return self.channel.guild
+    def guild(self) -> Optional[Guild]:
+        """Optional[:class:`Guild`]: The guild we're connected to, if applicable."""
+        return getattr(self.channel, 'guild', None)
 
     @property
     def user(self) -> ClientUser:
         """:class:`ClientUser`: The user connected to voice (i.e. ourselves)."""
-        return self._state.user  # type: ignore
+        return self._state.user
 
-    def checked_add(self, attr: str, value: int, limit: int) -> None:
+    def checked_add(self, attr, value, limit):
         val = getattr(self, attr)
         if val + value > limit:
             setattr(self, attr, 0)
@@ -298,7 +283,7 @@ class VoiceClient(VoiceProtocol):
     # connection related
 
     async def on_voice_state_update(self, data: GuildVoiceStatePayload) -> None:
-        self.session_id: str = data['session_id']
+        self.session_id = data['session_id']
         channel_id = data['channel_id']
 
         if not self._handshaking or self._potentially_reconnecting:
@@ -309,7 +294,8 @@ class VoiceClient(VoiceProtocol):
                 # We're being disconnected so cleanup
                 await self.disconnect()
             else:
-                self.channel = channel_id and self.guild.get_channel(int(channel_id))  # type: ignore
+                guild = self.guild
+                self.channel = channel_id and guild and guild.get_channel(int(channel_id))  # type: ignore
         else:
             self._voice_state_complete.set()
 
@@ -318,26 +304,24 @@ class VoiceClient(VoiceProtocol):
             _log.info('Ignoring extraneous voice server update.')
             return
 
-        self.token = data['token']
+        self.token = data.get('token')
         self.server_id = int(data['guild_id'])
         endpoint = data.get('endpoint')
 
         if endpoint is None or self.token is None:
-            _log.warning(
-                'Awaiting endpoint... This requires waiting. '
-                'If timeout occurred considering raising the timeout and reconnecting.'
-            )
+            _log.warning('Awaiting endpoint... This requires waiting. ' \
+                        'If timeout occurred considering raising the timeout and reconnecting.')
             return
 
         self.endpoint, _, _ = endpoint.rpartition(':')
         if self.endpoint.startswith('wss://'):
             # Just in case, strip it off since we're going to add it later
-            self.endpoint: str = self.endpoint[6:]
+            self.endpoint = self.endpoint[6:]
 
         # This gets set later
         self.endpoint_ip = MISSING
 
-        self.socket: socket.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.setblocking(False)
 
         if not self._handshaking:
@@ -347,8 +331,8 @@ class VoiceClient(VoiceProtocol):
 
         self._voice_server_complete.set()
 
-    async def voice_connect(self, self_deaf: bool = False, self_mute: bool = False) -> None:
-        await self.channel.guild.change_voice_state(channel=self.channel, self_deaf=self_deaf, self_mute=self_mute)
+    async def voice_connect(self) -> None:
+        await self.channel.guild.change_voice_state(channel=self.channel)
 
     async def voice_disconnect(self) -> None:
         _log.info('The voice handshake is being terminated for Channel ID %s (Guild ID %s)', self.channel.id, self.guild.id)
@@ -375,7 +359,7 @@ class VoiceClient(VoiceProtocol):
         self._connected.set()
         return ws
 
-    async def connect(self, *, reconnect: bool, timeout: float, self_deaf: bool = False, self_mute: bool = False) -> None:
+    async def connect(self, *, reconnect: bool, timeout: float) ->None:
         _log.info('Connecting to voice...')
         self.timeout = timeout
 
@@ -389,7 +373,7 @@ class VoiceClient(VoiceProtocol):
             ]
 
             # Start the connection flow
-            await self.voice_connect(self_deaf=self_deaf, self_mute=self_mute)
+            await self.voice_connect()
 
             try:
                 await utils.sane_wait_for(futures, timeout=timeout)
@@ -412,7 +396,7 @@ class VoiceClient(VoiceProtocol):
                     raise
 
         if self._runner is MISSING:
-            self._runner = self.client.loop.create_task(self.poll_voice_ws(reconnect))
+            self._runner = self.loop.create_task(self.poll_voice_ws(reconnect))
 
     async def potential_reconnect(self) -> bool:
         # Attempt to stop the player thread from playing early
@@ -519,14 +503,14 @@ class VoiceClient(VoiceProtocol):
             if self.socket:
                 self.socket.close()
 
-    async def move_to(self, channel: Optional[abc.Snowflake]) -> None:
+    async def move_to(self, channel: abc.Snowflake) -> None:
         """|coro|
 
         Moves you to a different voice channel.
 
         Parameters
         -----------
-        channel: Optional[:class:`abc.Snowflake`]
+        channel: :class:`abc.Snowflake`
             The channel to move to. Must be a voice channel.
         """
         await self.channel.guild.change_voice_state(channel=channel)
@@ -572,7 +556,7 @@ class VoiceClient(VoiceProtocol):
 
         return header + box.encrypt(bytes(data), bytes(nonce)).ciphertext + nonce[:4]
 
-    def play(self, source: AudioSource, *, after: Optional[Callable[[Optional[Exception]], Any]] = None) -> None:
+    def play(self, source: AudioSource, *, after: Callable[[Optional[Exception]], Any]=None) -> None:
         """Plays an :class:`AudioSource`.
 
         The finalizer, ``after`` is called after the source has been exhausted

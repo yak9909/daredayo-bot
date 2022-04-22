@@ -24,9 +24,10 @@ DEALINGS IN THE SOFTWARE.
 
 from __future__ import annotations
 
+import time
+import asyncio
 from typing import (
     Any,
-    AsyncIterator,
     Callable,
     Dict,
     Iterable,
@@ -34,25 +35,26 @@ from typing import (
     Mapping,
     Optional,
     TYPE_CHECKING,
-    Sequence,
     Tuple,
+    Type,
+    TypeVar,
     Union,
     overload,
 )
 import datetime
 
 import discord.abc
-from .scheduled_event import ScheduledEvent
 from .permissions import PermissionOverwrite, Permissions
-from .enums import ChannelType, PrivacyLevel, try_enum, VideoQualityMode
+from .enums import ChannelType, StagePrivacyLevel, try_enum, VoiceRegion, VideoQualityMode
 from .mixins import Hashable
+from .object import Object
 from . import utils
 from .utils import MISSING
 from .asset import Asset
-from .errors import ClientException
+from .errors import ClientException, InvalidArgument
 from .stage_instance import StageInstance
 from .threads import Thread
-from .http import handle_message_parameters
+from .iterators import ArchivedThreadIterator
 
 __all__ = (
     'TextChannel',
@@ -60,38 +62,36 @@ __all__ = (
     'StageChannel',
     'DMChannel',
     'CategoryChannel',
-    'ForumChannel',
+    'StoreChannel',
     'GroupChannel',
     'PartialMessageable',
 )
 
 if TYPE_CHECKING:
-    from typing_extensions import Self
-
     from .types.threads import ThreadArchiveDuration
     from .role import Role
     from .member import Member, VoiceState
     from .abc import Snowflake, SnowflakeTime
-    from .embeds import Embed
     from .message import Message, PartialMessage
-    from .mentions import AllowedMentions
     from .webhook import Webhook
     from .state import ConnectionState
-    from .sticker import GuildSticker, StickerItem
-    from .file import File
     from .user import ClientUser, User, BaseUser
     from .guild import Guild, GuildChannel as GuildChannelType
-    from .ui.view import View
     from .types.channel import (
         TextChannel as TextChannelPayload,
         VoiceChannel as VoiceChannelPayload,
         StageChannel as StageChannelPayload,
         DMChannel as DMChannelPayload,
         CategoryChannel as CategoryChannelPayload,
+        StoreChannel as StoreChannelPayload,
         GroupDMChannel as GroupChannelPayload,
-        ForumChannel as ForumChannelPayload,
     )
     from .types.snowflake import SnowflakeList
+
+
+async def _single_delete_strategy(messages: Iterable[Message]):
+    for m in messages:
+        await m.delete()
 
 
 class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
@@ -139,7 +139,11 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
         Bots and users with :attr:`~Permissions.manage_channels` or
         :attr:`~Permissions.manage_messages` bypass slowmode.
     nsfw: :class:`bool`
-        If the channel is marked as "not safe for work" or "age restricted".
+        If the channel is marked as "not safe for work".
+
+        .. note::
+
+            To check if the channel or the guild of that channel are marked as NSFW, consider :meth:`is_nsfw` instead.
     default_auto_archive_duration: :class:`int`
         The default auto archive duration in minutes for threads created in this channel.
 
@@ -194,7 +198,7 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
         self.last_message_id: Optional[int] = utils._get_as_snowflake(data, 'last_message_id')
         self._fill_overwrites(data)
 
-    async def _get_channel(self) -> Self:
+    async def _get_channel(self):
         return self
 
     @property
@@ -238,7 +242,7 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
 
     @property
     def last_message(self) -> Optional[Message]:
-        """Retrieves the last message from this channel in cache.
+        """Fetches the last message from this channel in cache.
 
         The message might not be valid or point to an existing message.
 
@@ -258,14 +262,6 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
         return self._state._get_message(self.last_message_id) if self.last_message_id else None
 
     @overload
-    async def edit(self) -> Optional[TextChannel]:
-        ...
-
-    @overload
-    async def edit(self, *, position: int, reason: Optional[str] = ...) -> None:
-        ...
-
-    @overload
     async def edit(
         self,
         *,
@@ -280,10 +276,14 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
         default_auto_archive_duration: ThreadArchiveDuration = ...,
         type: ChannelType = ...,
         overwrites: Mapping[Union[Role, Member, Snowflake], PermissionOverwrite] = ...,
-    ) -> TextChannel:
+    ) -> Optional[TextChannel]:
         ...
 
-    async def edit(self, *, reason: Optional[str] = None, **options: Any) -> Optional[TextChannel]:
+    @overload
+    async def edit(self) -> Optional[TextChannel]:
+        ...
+
+    async def edit(self, *, reason=None, **options):
         """|coro|
 
         Edits the channel.
@@ -299,10 +299,6 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
 
         .. versionchanged:: 2.0
             Edits are no longer in-place, the newly edited channel is returned instead.
-
-        .. versionchanged:: 2.0
-            This function will now raise :exc:`TypeError` or
-            :exc:`ValueError` instead of ``InvalidArgument``.
 
         Parameters
         ----------
@@ -338,10 +334,9 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
 
         Raises
         ------
-        ValueError
-            The new ``position`` is less than 0 or greater than the number of channels.
-        TypeError
-            The permission overwrite information is not in proper form.
+        InvalidArgument
+            If position is less than 0 or greater than the number of channels, or if
+            the permission overwrite information is not in proper form.
         Forbidden
             You do not have permissions to edit the channel.
         HTTPException
@@ -365,7 +360,7 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
             {'topic': self.topic, 'nsfw': self.nsfw, 'rate_limit_per_user': self.slowmode_delay}, name=name, reason=reason
         )
 
-    async def delete_messages(self, messages: Iterable[Snowflake], *, reason: Optional[str] = None) -> None:
+    async def delete_messages(self, messages: Iterable[Snowflake]) -> None:
         """|coro|
 
         Deletes a list of messages. This is similar to :meth:`Message.delete`
@@ -381,18 +376,10 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
         You must have the :attr:`~Permissions.manage_messages` permission to
         use this.
 
-        .. versionchanged:: 2.0
-
-            ``messages`` parameter is now positional-only.
-
-            The ``reason`` keyword-only parameter was added.
-
         Parameters
         -----------
         messages: Iterable[:class:`abc.Snowflake`]
             An iterable of messages denoting which ones to bulk delete.
-        reason: Optional[:class:`str`]
-            The reason for deleting the messages. Shows up on the audit log.
 
         Raises
         ------
@@ -420,7 +407,7 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
             raise ClientException('Can only bulk delete messages up to 100 messages')
 
         message_ids: SnowflakeList = [m.id for m in messages]
-        await self._state.http.delete_messages(self.id, message_ids, reason=reason)
+        await self._state.http.delete_messages(self.id, message_ids)
 
     async def purge(
         self,
@@ -432,7 +419,6 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
         around: Optional[SnowflakeTime] = None,
         oldest_first: Optional[bool] = False,
         bulk: bool = True,
-        reason: Optional[str] = None,
     ) -> List[Message]:
         """|coro|
 
@@ -444,10 +430,6 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
         delete messages even if they are your own.
         The :attr:`~Permissions.read_message_history` permission is
         also needed to retrieve message history.
-
-        .. versionchanged:: 2.0
-
-            The ``reason`` keyword-only parameter was added.
 
         Examples
         ---------
@@ -480,8 +462,6 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
             If ``True``, use bulk delete. Setting this to ``False`` is useful for mass-deleting
             a bot's own messages without :attr:`Permissions.manage_messages`. When ``True``, will
             fall back to single delete if messages are older than two weeks.
-        reason: Optional[:class:`str`]
-            The reason for purging the messages. Shows up on the audit log.
 
         Raises
         -------
@@ -495,17 +475,51 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
         List[:class:`.Message`]
             The list of messages that were deleted.
         """
-        return await discord.abc._purge_helper(
-            self,
-            limit=limit,
-            check=check,
-            before=before,
-            after=after,
-            around=around,
-            oldest_first=oldest_first,
-            bulk=bulk,
-            reason=reason,
-        )
+
+        if check is MISSING:
+            check = lambda m: True
+
+        iterator = self.history(limit=limit, before=before, after=after, oldest_first=oldest_first, around=around)
+        ret: List[Message] = []
+        count = 0
+
+        minimum_time = int((time.time() - 14 * 24 * 60 * 60) * 1000.0 - 1420070400000) << 22
+        strategy = self.delete_messages if bulk else _single_delete_strategy
+
+        async for message in iterator:
+            if count == 100:
+                to_delete = ret[-100:]
+                await strategy(to_delete)
+                count = 0
+                await asyncio.sleep(1)
+
+            if not check(message):
+                continue
+
+            if message.id < minimum_time:
+                # older than 14 days old
+                if count == 1:
+                    await ret[-1].delete()
+                elif count >= 2:
+                    to_delete = ret[-count:]
+                    await strategy(to_delete)
+
+                count = 0
+                strategy = _single_delete_strategy
+
+            count += 1
+            ret.append(message)
+
+        # SOme messages remaining to poll
+        if count >= 2:
+            # more than 2 messages -> bulk delete
+            to_delete = ret[-count:]
+            await strategy(to_delete)
+        elif count == 1:
+            # delete a single message
+            await ret[-1].delete()
+
+        return ret
 
     async def webhooks(self) -> List[Webhook]:
         """|coro|
@@ -566,7 +580,7 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
         from .webhook import Webhook
 
         if avatar is not None:
-            avatar = utils._bytes_to_base64_data(avatar)  # type: ignore # Silence reassignment error
+            avatar = utils._bytes_to_base64_data(avatar)  # type: ignore
 
         data = await self._state.http.create_webhook(self.id, name=str(name), avatar=avatar, reason=reason)
         return Webhook.from_state(data, state=self._state)
@@ -584,10 +598,6 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
 
         .. versionadded:: 1.3
 
-        .. versionchanged:: 2.0
-            This function will now raise :exc:`TypeError` instead of
-            ``InvalidArgument``.
-
         Parameters
         -----------
         destination: :class:`TextChannel`
@@ -603,10 +613,6 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
             Following the channel failed.
         Forbidden
             You do not have the permissions to create a webhook.
-        ClientException
-            The channel is not a news channel.
-        TypeError
-            The destination channel is not a text channel.
 
         Returns
         --------
@@ -618,7 +624,7 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
             raise ClientException('The channel must be a news channel.')
 
         if not isinstance(destination, TextChannel):
-            raise TypeError(f'Expected TextChannel received {destination.__class__.__name__}')
+            raise InvalidArgument(f'Expected TextChannel received {destination.__class__.__name__}')
 
         from .webhook import Webhook
 
@@ -632,10 +638,6 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
         doing an unnecessary API call.
 
         .. versionadded:: 1.6
-
-        .. versionchanged:: 2.0
-
-            ``message_id`` parameter is now positional-only.
 
         Parameters
         ------------
@@ -677,8 +679,6 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
         auto_archive_duration: ThreadArchiveDuration = MISSING,
         type: Optional[ChannelType] = None,
         reason: Optional[str] = None,
-        invitable: bool = True,
-        slowmode_delay: Optional[int] = None,
     ) -> Thread:
         """|coro|
 
@@ -706,13 +706,6 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
             By default this creates a private thread if this is ``None``.
         reason: :class:`str`
             The reason for creating a new thread. Shows up on the audit log.
-        invitable: :class:`bool`
-            Whether non-moderators can add users to the thread. Only applicable to private threads.
-            Defaults to ``True``.
-        slowmode_delay: Optional[:class:`int`]
-            Specifies the slowmode rate limit for user in this channel, in seconds.
-            The maximum value possible is `21600`. By default no slowmode rate limit
-            if this is ``None``.
 
         Raises
         -------
@@ -737,8 +730,6 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
                 auto_archive_duration=auto_archive_duration or self.default_auto_archive_duration,
                 type=type.value,
                 reason=reason,
-                invitable=invitable,
-                rate_limit_per_user=slowmode_delay,
             )
         else:
             data = await self._state.http.start_thread_with_message(
@@ -747,21 +738,19 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
                 name=name,
                 auto_archive_duration=auto_archive_duration or self.default_auto_archive_duration,
                 reason=reason,
-                rate_limit_per_user=slowmode_delay,
             )
 
         return Thread(guild=self.guild, state=self._state, data=data)
 
-    async def archived_threads(
+    def archived_threads(
         self,
         *,
         private: bool = False,
         joined: bool = False,
-        limit: Optional[int] = 100,
+        limit: Optional[int] = 50,
         before: Optional[Union[Snowflake, datetime.datetime]] = None,
-    ) -> AsyncIterator[Thread]:
-        """Returns an :term:`asynchronous iterator` that iterates over all archived threads in this text channel,
-        in order of decreasing ID for joined threads, and decreasing :attr:`Thread.archive_timestamp` otherwise.
+    ) -> ArchivedThreadIterator:
+        """Returns an :class:`~discord.AsyncIterator` that iterates over all archived threads in the guild.
 
         You must have :attr:`~Permissions.read_message_history` to use this. If iterating over private threads
         then :attr:`~Permissions.manage_threads` is also required.
@@ -788,63 +777,13 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
             You do not have permissions to get archived threads.
         HTTPException
             The request to get the archived threads failed.
-        ValueError
-            ``joined`` was set to ``True`` and ``private`` was set to ``False``. You cannot retrieve public archived
-            threads that you have joined.
 
         Yields
         -------
         :class:`Thread`
             The archived threads.
         """
-        if joined and not private:
-            raise ValueError('Cannot retrieve joined public archived threads')
-
-        before_timestamp = None
-
-        if isinstance(before, datetime.datetime):
-            if joined:
-                before_timestamp = str(utils.time_snowflake(before, high=False))
-            else:
-                before_timestamp = before.isoformat()
-        elif before is not None:
-            if joined:
-                before_timestamp = str(before.id)
-            else:
-                before_timestamp = utils.snowflake_time(before.id).isoformat()
-
-        update_before = lambda data: data['thread_metadata']['archive_timestamp']
-        endpoint = self.guild._state.http.get_public_archived_threads
-
-        if joined:
-            update_before = lambda data: data['id']
-            endpoint = self.guild._state.http.get_joined_private_archived_threads
-        elif private:
-            endpoint = self.guild._state.http.get_private_archived_threads
-
-        while True:
-            retrieve = 100
-            if limit is not None:
-                if limit <= 0:
-                    return
-                retrieve = max(2, min(retrieve, limit))
-
-            data = await endpoint(self.id, before=before_timestamp, limit=retrieve)
-
-            threads = data.get('threads', [])
-            for raw_thread in threads:
-                yield Thread(guild=self.guild, state=self.guild._state, data=raw_thread)
-                # Currently the API doesn't let you request less than 2 threads.
-                # Bail out early if we had to retrieve more than what the limit was.
-                if limit is not None:
-                    limit -= 1
-                    if limit <= 0:
-                        return
-
-            if not data.get('has_more', False):
-                return
-
-            before_timestamp = update_before(threads[-1])
+        return ArchivedThreadIterator(self.id, self.guild, limit=limit, joined=joined, private=private, before=before)
 
 
 class VocalGuildChannel(discord.abc.Connectable, discord.abc.GuildChannel, Hashable):
@@ -852,7 +791,6 @@ class VocalGuildChannel(discord.abc.Connectable, discord.abc.GuildChannel, Hasha
         'name',
         'id',
         'guild',
-        'nsfw',
         'bitrate',
         'user_limit',
         '_state',
@@ -861,7 +799,6 @@ class VocalGuildChannel(discord.abc.Connectable, discord.abc.GuildChannel, Hasha
         'category_id',
         'rtc_region',
         'video_quality_mode',
-        'last_message_id',
     )
 
     def __init__(self, *, state: ConnectionState, guild: Guild, data: Union[VoiceChannelPayload, StageChannelPayload]):
@@ -876,28 +813,20 @@ class VocalGuildChannel(discord.abc.Connectable, discord.abc.GuildChannel, Hasha
         return self.guild.id, self.id
 
     def _update(self, guild: Guild, data: Union[VoiceChannelPayload, StageChannelPayload]) -> None:
-        self.guild: Guild = guild
+        self.guild = guild
         self.name: str = data['name']
-        self.nsfw: bool = data.get('nsfw', False)
-        self.rtc_region: Optional[str] = data.get('rtc_region')
+        rtc = data.get('rtc_region')
+        self.rtc_region: Optional[VoiceRegion] = try_enum(VoiceRegion, rtc) if rtc is not None else None
         self.video_quality_mode: VideoQualityMode = try_enum(VideoQualityMode, data.get('video_quality_mode', 1))
         self.category_id: Optional[int] = utils._get_as_snowflake(data, 'parent_id')
-        self.last_message_id: Optional[int] = utils._get_as_snowflake(data, 'last_message_id')
         self.position: int = data['position']
-        self.bitrate: int = data['bitrate']
-        self.user_limit: int = data['user_limit']
+        self.bitrate: int = data.get('bitrate')
+        self.user_limit: int = data.get('user_limit')
         self._fill_overwrites(data)
 
     @property
     def _sorting_bucket(self) -> int:
         return ChannelType.voice.value
-
-    def is_nsfw(self) -> bool:
-        """:class:`bool`: Checks if the channel is NSFW.
-
-        .. versionadded:: 2.0
-        """
-        return self.nsfw
 
     @property
     def members(self) -> List[Member]:
@@ -934,14 +863,6 @@ class VocalGuildChannel(discord.abc.Connectable, discord.abc.GuildChannel, Hasha
         }
         # fmt: on
 
-    @property
-    def scheduled_events(self) -> List[ScheduledEvent]:
-        """List[:class:`ScheduledEvent`]: Returns all scheduled events for this channel.
-
-        .. versionadded:: 2.0
-        """
-        return [event for event in self.guild.scheduled_events if event.channel_id == self.id]
-
     @utils.copy_doc(discord.abc.GuildChannel.permissions_for)
     def permissions_for(self, obj: Union[Member, Role], /) -> Permissions:
         base = super().permissions_for(obj)
@@ -955,7 +876,7 @@ class VocalGuildChannel(discord.abc.Connectable, discord.abc.GuildChannel, Hasha
         return base
 
 
-class VoiceChannel(discord.abc.Messageable, VocalGuildChannel):
+class VoiceChannel(VocalGuildChannel):
     """Represents a Discord guild voice channel.
 
     .. container:: operations
@@ -984,10 +905,6 @@ class VoiceChannel(discord.abc.Messageable, VocalGuildChannel):
         The guild the channel belongs to.
     id: :class:`int`
         The channel ID.
-    nsfw: :class:`bool`
-        If the channel is marked as "not safe for work" or "age restricted".
-
-        .. versionadded:: 2.0
     category_id: Optional[:class:`int`]
         The category channel ID this channel belongs to, if applicable.
     position: :class:`int`
@@ -997,21 +914,13 @@ class VoiceChannel(discord.abc.Messageable, VocalGuildChannel):
         The channel's preferred audio bitrate in bits per second.
     user_limit: :class:`int`
         The channel's limit for number of members that can be in a voice channel.
-    rtc_region: Optional[:class:`str`]
+    rtc_region: Optional[:class:`VoiceRegion`]
         The region for the voice channel's voice communication.
         A value of ``None`` indicates automatic voice region detection.
 
         .. versionadded:: 1.7
-
-        .. versionchanged:: 2.0
-            The type of this attribute has changed to :class:`str`.
     video_quality_mode: :class:`VideoQualityMode`
         The camera video quality for the voice channel's participants.
-
-        .. versionadded:: 2.0
-    last_message_id: Optional[:class:`int`]
-        The last message ID of the message sent to this channel. It may
-        *not* point to an existing or valid message.
 
         .. versionadded:: 2.0
     """
@@ -1032,293 +941,37 @@ class VoiceChannel(discord.abc.Messageable, VocalGuildChannel):
         joined = ' '.join('%s=%r' % t for t in attrs)
         return f'<{self.__class__.__name__} {joined}>'
 
-    async def _get_channel(self) -> Self:
-        return self
-
     @property
     def type(self) -> ChannelType:
         """:class:`ChannelType`: The channel's Discord type."""
         return ChannelType.voice
-
-    @property
-    def last_message(self) -> Optional[Message]:
-        """Retrieves the last message from this channel in cache.
-
-        The message might not be valid or point to an existing message.
-
-        .. versionadded:: 2.0
-
-        .. admonition:: Reliable Fetching
-            :class: helpful
-
-            For a slightly more reliable method of fetching the
-            last message, consider using either :meth:`history`
-            or :meth:`fetch_message` with the :attr:`last_message_id`
-            attribute.
-
-        Returns
-        ---------
-        Optional[:class:`Message`]
-            The last message in this channel or ``None`` if not found.
-        """
-        return self._state._get_message(self.last_message_id) if self.last_message_id else None
-
-    def get_partial_message(self, message_id: int, /) -> PartialMessage:
-        """Creates a :class:`PartialMessage` from the message ID.
-
-        This is useful if you want to work with a message and only have its ID without
-        doing an unnecessary API call.
-
-        .. versionadded:: 2.0
-
-        Parameters
-        ------------
-        message_id: :class:`int`
-            The message ID to create a partial message for.
-
-        Returns
-        ---------
-        :class:`PartialMessage`
-            The partial message.
-        """
-
-        from .message import PartialMessage
-
-        return PartialMessage(channel=self, id=message_id)
-
-    async def delete_messages(self, messages: Iterable[Snowflake], *, reason: Optional[str] = None) -> None:
-        """|coro|
-
-        Deletes a list of messages. This is similar to :meth:`Message.delete`
-        except it bulk deletes multiple messages.
-
-        As a special case, if the number of messages is 0, then nothing
-        is done. If the number of messages is 1 then single message
-        delete is done. If it's more than two, then bulk delete is used.
-
-        You cannot bulk delete more than 100 messages or messages that
-        are older than 14 days old.
-
-        You must have the :attr:`~Permissions.manage_messages` permission to
-        use this.
-
-        .. versionadded:: 2.0
-
-        Parameters
-        -----------
-        messages: Iterable[:class:`abc.Snowflake`]
-            An iterable of messages denoting which ones to bulk delete.
-        reason: Optional[:class:`str`]
-            The reason for deleting the messages. Shows up on the audit log.
-
-        Raises
-        ------
-        ClientException
-            The number of messages to delete was more than 100.
-        Forbidden
-            You do not have proper permissions to delete the messages.
-        NotFound
-            If single delete, then the message was already deleted.
-        HTTPException
-            Deleting the messages failed.
-        """
-        if not isinstance(messages, (list, tuple)):
-            messages = list(messages)
-
-        if len(messages) == 0:
-            return  # do nothing
-
-        if len(messages) == 1:
-            message_id: int = messages[0].id
-            await self._state.http.delete_message(self.id, message_id)
-            return
-
-        if len(messages) > 100:
-            raise ClientException('Can only bulk delete messages up to 100 messages')
-
-        message_ids: SnowflakeList = [m.id for m in messages]
-        await self._state.http.delete_messages(self.id, message_ids, reason=reason)
-
-    async def purge(
-        self,
-        *,
-        limit: Optional[int] = 100,
-        check: Callable[[Message], bool] = MISSING,
-        before: Optional[SnowflakeTime] = None,
-        after: Optional[SnowflakeTime] = None,
-        around: Optional[SnowflakeTime] = None,
-        oldest_first: Optional[bool] = False,
-        bulk: bool = True,
-        reason: Optional[str] = None,
-    ) -> List[Message]:
-        """|coro|
-
-        Purges a list of messages that meet the criteria given by the predicate
-        ``check``. If a ``check`` is not provided then all messages are deleted
-        without discrimination.
-
-        You must have the :attr:`~Permissions.manage_messages` permission to
-        delete messages even if they are your own.
-        The :attr:`~Permissions.read_message_history` permission is
-        also needed to retrieve message history.
-
-        .. versionadded:: 2.0
-
-        Examples
-        ---------
-
-        Deleting bot's messages ::
-
-            def is_me(m):
-                return m.author == client.user
-
-            deleted = await channel.purge(limit=100, check=is_me)
-            await channel.send(f'Deleted {len(deleted)} message(s)')
-
-        Parameters
-        -----------
-        limit: Optional[:class:`int`]
-            The number of messages to search through. This is not the number
-            of messages that will be deleted, though it can be.
-        check: Callable[[:class:`Message`], :class:`bool`]
-            The function used to check if a message should be deleted.
-            It must take a :class:`Message` as its sole parameter.
-        before: Optional[Union[:class:`abc.Snowflake`, :class:`datetime.datetime`]]
-            Same as ``before`` in :meth:`history`.
-        after: Optional[Union[:class:`abc.Snowflake`, :class:`datetime.datetime`]]
-            Same as ``after`` in :meth:`history`.
-        around: Optional[Union[:class:`abc.Snowflake`, :class:`datetime.datetime`]]
-            Same as ``around`` in :meth:`history`.
-        oldest_first: Optional[:class:`bool`]
-            Same as ``oldest_first`` in :meth:`history`.
-        bulk: :class:`bool`
-            If ``True``, use bulk delete. Setting this to ``False`` is useful for mass-deleting
-            a bot's own messages without :attr:`Permissions.manage_messages`. When ``True``, will
-            fall back to single delete if messages are older than two weeks.
-        reason: Optional[:class:`str`]
-            The reason for purging the messages. Shows up on the audit log.
-
-        Raises
-        -------
-        Forbidden
-            You do not have proper permissions to do the actions required.
-        HTTPException
-            Purging the messages failed.
-
-        Returns
-        --------
-        List[:class:`.Message`]
-            The list of messages that were deleted.
-        """
-
-        return await discord.abc._purge_helper(
-            self,
-            limit=limit,
-            check=check,
-            before=before,
-            after=after,
-            around=around,
-            oldest_first=oldest_first,
-            bulk=bulk,
-            reason=reason,
-        )
-
-    async def webhooks(self) -> List[Webhook]:
-        """|coro|
-
-        Gets the list of webhooks from this channel.
-
-        Requires :attr:`~.Permissions.manage_webhooks` permissions.
-
-        .. versionadded:: 2.0
-
-        Raises
-        -------
-        Forbidden
-            You don't have permissions to get the webhooks.
-
-        Returns
-        --------
-        List[:class:`Webhook`]
-            The webhooks for this channel.
-        """
-
-        from .webhook import Webhook
-
-        data = await self._state.http.channel_webhooks(self.id)
-        return [Webhook.from_state(d, state=self._state) for d in data]
-
-    async def create_webhook(self, *, name: str, avatar: Optional[bytes] = None, reason: Optional[str] = None) -> Webhook:
-        """|coro|
-
-        Creates a webhook for this channel.
-
-        Requires :attr:`~.Permissions.manage_webhooks` permissions.
-
-        .. versionadded:: 2.0
-
-        Parameters
-        -------------
-        name: :class:`str`
-            The webhook's name.
-        avatar: Optional[:class:`bytes`]
-            A :term:`py:bytes-like object` representing the webhook's default avatar.
-            This operates similarly to :meth:`~ClientUser.edit`.
-        reason: Optional[:class:`str`]
-            The reason for creating this webhook. Shows up in the audit logs.
-
-        Raises
-        -------
-        HTTPException
-            Creating the webhook failed.
-        Forbidden
-            You do not have permissions to create a webhook.
-
-        Returns
-        --------
-        :class:`Webhook`
-            The created webhook.
-        """
-
-        from .webhook import Webhook
-
-        if avatar is not None:
-            avatar = utils._bytes_to_base64_data(avatar)  # type: ignore # Silence reassignment error
-
-        data = await self._state.http.create_webhook(self.id, name=str(name), avatar=avatar, reason=reason)
-        return Webhook.from_state(data, state=self._state)
 
     @utils.copy_doc(discord.abc.GuildChannel.clone)
     async def clone(self, *, name: Optional[str] = None, reason: Optional[str] = None) -> VoiceChannel:
         return await self._clone_impl({'bitrate': self.bitrate, 'user_limit': self.user_limit}, name=name, reason=reason)
 
     @overload
-    async def edit(self) -> None:
-        ...
-
-    @overload
-    async def edit(self, *, position: int, reason: Optional[str] = ...) -> None:
-        ...
-
-    @overload
     async def edit(
         self,
         *,
         name: str = ...,
-        nsfw: bool = ...,
         bitrate: int = ...,
         user_limit: int = ...,
         position: int = ...,
         sync_permissions: int = ...,
         category: Optional[CategoryChannel] = ...,
         overwrites: Mapping[Union[Role, Member], PermissionOverwrite] = ...,
-        rtc_region: Optional[str] = ...,
+        rtc_region: Optional[VoiceRegion] = ...,
         video_quality_mode: VideoQualityMode = ...,
         reason: Optional[str] = ...,
-    ) -> VoiceChannel:
+    ) -> Optional[VoiceChannel]:
         ...
 
-    async def edit(self, *, reason: Optional[str] = None, **options: Any) -> Optional[VoiceChannel]:
+    @overload
+    async def edit(self) -> Optional[VoiceChannel]:
+        ...
+
+    async def edit(self, *, reason=None, **options):
         """|coro|
 
         Edits the channel.
@@ -1332,21 +985,12 @@ class VoiceChannel(discord.abc.Messageable, VocalGuildChannel):
         .. versionchanged:: 2.0
             Edits are no longer in-place, the newly edited channel is returned instead.
 
-        .. versionchanged:: 2.0
-            The ``region`` parameter now accepts :class:`str` instead of an enum.
-
-        .. versionchanged:: 2.0
-            This function will now raise :exc:`TypeError` instead of
-            ``InvalidArgument``.
-
         Parameters
         ----------
         name: :class:`str`
             The new channel's name.
         bitrate: :class:`int`
             The new channel's bitrate.
-        nsfw: :class:`bool`
-            To mark the channel as NSFW or not.
         user_limit: :class:`int`
             The new channel's user limit.
         position: :class:`int`
@@ -1362,7 +1006,7 @@ class VoiceChannel(discord.abc.Messageable, VocalGuildChannel):
         overwrites: :class:`Mapping`
             A :class:`Mapping` of target (either a role or a member) to
             :class:`PermissionOverwrite` to apply to the channel.
-        rtc_region: Optional[:class:`str`]
+        rtc_region: Optional[:class:`VoiceRegion`]
             The new region for the voice channel's voice communication.
             A value of ``None`` indicates automatic voice region detection.
 
@@ -1374,7 +1018,7 @@ class VoiceChannel(discord.abc.Messageable, VocalGuildChannel):
 
         Raises
         ------
-        TypeError
+        InvalidArgument
             If the permission overwrite information is not in proper form.
         Forbidden
             You do not have permissions to edit the channel.
@@ -1425,10 +1069,6 @@ class StageChannel(VocalGuildChannel):
         The guild the channel belongs to.
     id: :class:`int`
         The channel ID.
-    nsfw: :class:`bool`
-        If the channel is marked as "not safe for work" or "age restricted".
-
-        .. versionadded:: 2.0
     topic: Optional[:class:`str`]
         The channel's topic. ``None`` if it isn't set.
     category_id: Optional[:class:`int`]
@@ -1440,7 +1080,7 @@ class StageChannel(VocalGuildChannel):
         The channel's preferred audio bitrate in bits per second.
     user_limit: :class:`int`
         The channel's limit for number of members that can be in a stage channel.
-    rtc_region: Optional[:class:`str`]
+    rtc_region: Optional[:class:`VoiceRegion`]
         The region for the stage channel's voice communication.
         A value of ``None`` indicates automatic voice region detection.
     video_quality_mode: :class:`VideoQualityMode`
@@ -1468,7 +1108,7 @@ class StageChannel(VocalGuildChannel):
 
     def _update(self, guild: Guild, data: StageChannelPayload) -> None:
         super()._update(guild, data)
-        self.topic: Optional[str] = data.get('topic')
+        self.topic = data.get('topic')
 
     @property
     def requesting_to_speak(self) -> List[Member]:
@@ -1522,7 +1162,7 @@ class StageChannel(VocalGuildChannel):
         return utils.get(self.guild.stage_instances, channel_id=self.id)
 
     async def create_instance(
-        self, *, topic: str, privacy_level: PrivacyLevel = MISSING, reason: Optional[str] = None
+        self, *, topic: str, privacy_level: StagePrivacyLevel = MISSING, reason: Optional[str] = None
     ) -> StageInstance:
         """|coro|
 
@@ -1537,14 +1177,14 @@ class StageChannel(VocalGuildChannel):
         -----------
         topic: :class:`str`
             The stage instance's topic.
-        privacy_level: :class:`PrivacyLevel`
-            The stage instance's privacy level. Defaults to :attr:`PrivacyLevel.guild_only`.
+        privacy_level: :class:`StagePrivacyLevel`
+            The stage instance's privacy level. Defaults to :attr:`StagePrivacyLevel.guild_only`.
         reason: :class:`str`
             The reason the stage instance was created. Shows up on the audit log.
 
         Raises
         ------
-        TypeError
+        InvalidArgument
             If the ``privacy_level`` parameter is not the proper type.
         Forbidden
             You do not have permissions to create a stage instance.
@@ -1560,8 +1200,8 @@ class StageChannel(VocalGuildChannel):
         payload: Dict[str, Any] = {'channel_id': self.id, 'topic': topic}
 
         if privacy_level is not MISSING:
-            if not isinstance(privacy_level, PrivacyLevel):
-                raise TypeError('privacy_level field must be of type PrivacyLevel')
+            if not isinstance(privacy_level, StagePrivacyLevel):
+                raise InvalidArgument('privacy_level field must be of type PrivacyLevel')
 
             payload['privacy_level'] = privacy_level.value
 
@@ -1577,9 +1217,9 @@ class StageChannel(VocalGuildChannel):
 
         Raises
         -------
-        NotFound
+        :exc:`.NotFound`
             The stage instance or channel could not be found.
-        HTTPException
+        :exc:`.HTTPException`
             Getting the stage instance failed.
 
         Returns
@@ -1591,30 +1231,26 @@ class StageChannel(VocalGuildChannel):
         return StageInstance(guild=self.guild, state=self._state, data=data)
 
     @overload
-    async def edit(self) -> None:
-        ...
-
-    @overload
-    async def edit(self, *, position: int, reason: Optional[str] = ...) -> None:
-        ...
-
-    @overload
     async def edit(
         self,
         *,
         name: str = ...,
-        nsfw: bool = ...,
+        topic: Optional[str] = ...,
         position: int = ...,
         sync_permissions: int = ...,
         category: Optional[CategoryChannel] = ...,
         overwrites: Mapping[Union[Role, Member], PermissionOverwrite] = ...,
-        rtc_region: Optional[str] = ...,
+        rtc_region: Optional[VoiceRegion] = ...,
         video_quality_mode: VideoQualityMode = ...,
         reason: Optional[str] = ...,
-    ) -> StageChannel:
+    ) -> Optional[StageChannel]:
         ...
 
-    async def edit(self, *, reason: Optional[str] = None, **options: Any) -> Optional[StageChannel]:
+    @overload
+    async def edit(self) -> Optional[StageChannel]:
+        ...
+
+    async def edit(self, *, reason=None, **options):
         """|coro|
 
         Edits the channel.
@@ -1628,21 +1264,12 @@ class StageChannel(VocalGuildChannel):
         .. versionchanged:: 2.0
             Edits are no longer in-place, the newly edited channel is returned instead.
 
-        .. versionchanged:: 2.0
-            The ``region`` parameter now accepts :class:`str` instead of an enum.
-
-        .. versionchanged:: 2.0
-            This function will now raise :exc:`TypeError` instead of
-            ``InvalidArgument``.
-
         Parameters
         ----------
         name: :class:`str`
             The new channel's name.
         position: :class:`int`
             The new channel's position.
-        nsfw: :class:`bool`
-            To mark the channel as NSFW or not.
         sync_permissions: :class:`bool`
             Whether to sync permissions with the channel's new or pre-existing
             category. Defaults to ``False``.
@@ -1654,7 +1281,7 @@ class StageChannel(VocalGuildChannel):
         overwrites: :class:`Mapping`
             A :class:`Mapping` of target (either a role or a member) to
             :class:`PermissionOverwrite` to apply to the channel.
-        rtc_region: Optional[:class:`str`]
+        rtc_region: Optional[:class:`VoiceRegion`]
             The new region for the stage channel's voice communication.
             A value of ``None`` indicates automatic voice region detection.
         video_quality_mode: :class:`VideoQualityMode`
@@ -1664,7 +1291,7 @@ class StageChannel(VocalGuildChannel):
 
         Raises
         ------
-        ValueError
+        InvalidArgument
             If the permission overwrite information is not in proper form.
         Forbidden
             You do not have permissions to edit the channel.
@@ -1762,14 +1389,6 @@ class CategoryChannel(discord.abc.GuildChannel, Hashable):
         return await self._clone_impl({'nsfw': self.nsfw}, name=name, reason=reason)
 
     @overload
-    async def edit(self) -> None:
-        ...
-
-    @overload
-    async def edit(self, *, position: int, reason: Optional[str] = ...) -> None:
-        ...
-
-    @overload
     async def edit(
         self,
         *,
@@ -1778,10 +1397,14 @@ class CategoryChannel(discord.abc.GuildChannel, Hashable):
         nsfw: bool = ...,
         overwrites: Mapping[Union[Role, Member], PermissionOverwrite] = ...,
         reason: Optional[str] = ...,
-    ) -> CategoryChannel:
+    ) -> Optional[CategoryChannel]:
         ...
 
-    async def edit(self, *, reason: Optional[str] = None, **options: Any) -> Optional[CategoryChannel]:
+    @overload
+    async def edit(self) -> Optional[CategoryChannel]:
+        ...
+
+    async def edit(self, *, reason=None, **options):
         """|coro|
 
         Edits the channel.
@@ -1794,10 +1417,6 @@ class CategoryChannel(discord.abc.GuildChannel, Hashable):
 
         .. versionchanged:: 2.0
             Edits are no longer in-place, the newly edited channel is returned instead.
-
-        .. versionchanged:: 2.0
-            This function will now raise :exc:`TypeError` or
-            :exc:`ValueError` instead of ``InvalidArgument``.
 
         Parameters
         ----------
@@ -1815,10 +1434,8 @@ class CategoryChannel(discord.abc.GuildChannel, Hashable):
 
         Raises
         ------
-        ValueError
+        InvalidArgument
             If position is less than 0 or greater than the number of categories.
-        TypeError
-            The overwrite information is not in proper form.
         Forbidden
             You do not have permissions to edit the category.
         HTTPException
@@ -1837,7 +1454,7 @@ class CategoryChannel(discord.abc.GuildChannel, Hashable):
             return self.__class__(state=self._state, guild=self.guild, data=payload)  # type: ignore
 
     @utils.copy_doc(discord.abc.GuildChannel.move)
-    async def move(self, **kwargs: Any) -> None:
+    async def move(self, **kwargs):
         kwargs.pop('category', None)
         await super().move(**kwargs)
 
@@ -1918,217 +1535,166 @@ class CategoryChannel(discord.abc.GuildChannel, Hashable):
         return await self.guild.create_stage_channel(name, category=self, **options)
 
 
-class ForumChannel(discord.abc.GuildChannel, Hashable):
-    """Represents a Discord guild forum channel.
-
-    .. versionadded:: 2.0
+class StoreChannel(discord.abc.GuildChannel, Hashable):
+    """Represents a Discord guild store channel.
 
     .. container:: operations
 
         .. describe:: x == y
 
-            Checks if two forums are equal.
+            Checks if two channels are equal.
 
         .. describe:: x != y
 
-            Checks if two forums are not equal.
+            Checks if two channels are not equal.
 
         .. describe:: hash(x)
 
-            Returns the forum's hash.
+            Returns the channel's hash.
 
         .. describe:: str(x)
 
-            Returns the forum's name.
+            Returns the channel's name.
 
     Attributes
     -----------
     name: :class:`str`
-        The forum name.
+        The channel name.
     guild: :class:`Guild`
-        The guild the forum belongs to.
+        The guild the channel belongs to.
     id: :class:`int`
-        The forum ID.
-    category_id: Optional[:class:`int`]
-        The category channel ID this forum belongs to, if applicable.
-    topic: Optional[:class:`str`]
-        The forum's topic. ``None`` if it doesn't exist.
+        The channel ID.
+    category_id: :class:`int`
+        The category channel ID this channel belongs to.
     position: :class:`int`
         The position in the channel list. This is a number that starts at 0. e.g. the
         top channel is position 0.
-    last_message_id: Optional[:class:`int`]
-        The last thread ID that was created on this forum. This technically also
-        coincides with the message ID that started the thread that was created.
-        It may *not* point to an existing or valid thread or message.
-    slowmode_delay: :class:`int`
-        The number of seconds a member must wait between creating threads
-        in this forum. A value of `0` denotes that it is disabled.
-        Bots and users with :attr:`~Permissions.manage_channels` or
-        :attr:`~Permissions.manage_messages` bypass slowmode.
     nsfw: :class:`bool`
-        If the forum is marked as "not safe for work" or "age restricted".
-    default_auto_archive_duration: :class:`int`
-        The default auto archive duration in minutes for threads created in this forum.
+        If the channel is marked as "not safe for work".
+
+        .. note::
+
+            To check if the channel or the guild of that channel are marked as NSFW, consider :meth:`is_nsfw` instead.
     """
 
     __slots__ = (
         'name',
         'id',
         'guild',
-        'topic',
         '_state',
-        '_flags',
         'nsfw',
         'category_id',
         'position',
-        'slowmode_delay',
         '_overwrites',
-        'last_message_id',
-        'default_auto_archive_duration',
     )
 
-    def __init__(self, *, state: ConnectionState, guild: Guild, data: ForumChannelPayload):
+    def __init__(self, *, state: ConnectionState, guild: Guild, data: StoreChannelPayload):
         self._state: ConnectionState = state
         self.id: int = int(data['id'])
         self._update(guild, data)
 
     def __repr__(self) -> str:
-        attrs = [
-            ('id', self.id),
-            ('name', self.name),
-            ('position', self.position),
-            ('nsfw', self.nsfw),
-            ('category_id', self.category_id),
-        ]
-        joined = ' '.join('%s=%r' % t for t in attrs)
-        return f'<{self.__class__.__name__} {joined}>'
+        return f'<StoreChannel id={self.id} name={self.name!r} position={self.position} nsfw={self.nsfw}>'
 
-    def _update(self, guild: Guild, data: ForumChannelPayload) -> None:
+    def _update(self, guild: Guild, data: StoreChannelPayload) -> None:
         self.guild: Guild = guild
         self.name: str = data['name']
         self.category_id: Optional[int] = utils._get_as_snowflake(data, 'parent_id')
-        self.topic: Optional[str] = data.get('topic')
         self.position: int = data['position']
         self.nsfw: bool = data.get('nsfw', False)
-        self.slowmode_delay: int = data.get('rate_limit_per_user', 0)
-        self.default_auto_archive_duration: ThreadArchiveDuration = data.get('default_auto_archive_duration', 1440)
-        self.last_message_id: Optional[int] = utils._get_as_snowflake(data, 'last_message_id')
         self._fill_overwrites(data)
-
-    @property
-    def type(self) -> ChannelType:
-        """:class:`ChannelType`: The channel's Discord type."""
-        return ChannelType.forum
 
     @property
     def _sorting_bucket(self) -> int:
         return ChannelType.text.value
 
+    @property
+    def type(self) -> ChannelType:
+        """:class:`ChannelType`: The channel's Discord type."""
+        return ChannelType.store
+
     @utils.copy_doc(discord.abc.GuildChannel.permissions_for)
     def permissions_for(self, obj: Union[Member, Role], /) -> Permissions:
         base = super().permissions_for(obj)
 
-        # text channels do not have voice related permissions
+        # store channels do not have voice related permissions
         denied = Permissions.voice()
         base.value &= ~denied.value
         return base
 
-    @property
-    def threads(self) -> List[Thread]:
-        """List[:class:`Thread`]: Returns all the threads that you can see."""
-        return [thread for thread in self.guild._threads.values() if thread.parent_id == self.id]
-
     def is_nsfw(self) -> bool:
-        """:class:`bool`: Checks if the forum is NSFW."""
+        """:class:`bool`: Checks if the channel is NSFW."""
         return self.nsfw
 
     @utils.copy_doc(discord.abc.GuildChannel.clone)
-    async def clone(self, *, name: Optional[str] = None, reason: Optional[str] = None) -> ForumChannel:
-        return await self._clone_impl(
-            {'topic': self.topic, 'nsfw': self.nsfw, 'rate_limit_per_user': self.slowmode_delay}, name=name, reason=reason
-        )
-
-    @overload
-    async def edit(self) -> None:
-        ...
-
-    @overload
-    async def edit(self, *, position: int, reason: Optional[str] = ...) -> None:
-        ...
+    async def clone(self, *, name: Optional[str] = None, reason: Optional[str] = None) -> StoreChannel:
+        return await self._clone_impl({'nsfw': self.nsfw}, name=name, reason=reason)
 
     @overload
     async def edit(
         self,
         *,
-        reason: Optional[str] = ...,
         name: str = ...,
-        topic: str = ...,
         position: int = ...,
         nsfw: bool = ...,
         sync_permissions: bool = ...,
-        category: Optional[CategoryChannel] = ...,
-        slowmode_delay: int = ...,
-        default_auto_archive_duration: ThreadArchiveDuration = ...,
-        type: ChannelType = ...,
-        overwrites: Mapping[Union[Role, Member, Snowflake], PermissionOverwrite] = ...,
-    ) -> ForumChannel:
+        category: Optional[CategoryChannel],
+        reason: Optional[str],
+        overwrites: Mapping[Union[Role, Member], PermissionOverwrite],
+    ) -> Optional[StoreChannel]:
         ...
 
-    async def edit(self, *, reason: Optional[str] = None, **options: Any) -> Optional[ForumChannel]:
+    @overload
+    async def edit(self) -> Optional[StoreChannel]:
+        ...
+
+    async def edit(self, *, reason=None, **options):
         """|coro|
 
-        Edits the forum.
+        Edits the channel.
 
         You must have the :attr:`~Permissions.manage_channels` permission to
         use this.
 
+        .. versionchanged:: 2.0
+            Edits are no longer in-place, the newly edited channel is returned instead.
+
         Parameters
         ----------
         name: :class:`str`
-            The new forum name.
-        topic: :class:`str`
-            The new forum's topic.
+            The new channel name.
         position: :class:`int`
-            The new forum's position.
+            The new channel's position.
         nsfw: :class:`bool`
-            To mark the forum as NSFW or not.
+            To mark the channel as NSFW or not.
         sync_permissions: :class:`bool`
-            Whether to sync permissions with the forum's new or pre-existing
+            Whether to sync permissions with the channel's new or pre-existing
             category. Defaults to ``False``.
         category: Optional[:class:`CategoryChannel`]
-            The new category for this forum. Can be ``None`` to remove the
+            The new category for this channel. Can be ``None`` to remove the
             category.
-        slowmode_delay: :class:`int`
-            Specifies the slowmode rate limit for user in this forum, in seconds.
-            A value of `0` disables slowmode. The maximum value possible is `21600`.
-        type: :class:`ChannelType`
-            Change the type of this text forum. Currently, only conversion between
-            :attr:`ChannelType.text` and :attr:`ChannelType.news` is supported. This
-            is only available to guilds that contain ``NEWS`` in :attr:`Guild.features`.
         reason: Optional[:class:`str`]
-            The reason for editing this forum. Shows up on the audit log.
+            The reason for editing this channel. Shows up on the audit log.
         overwrites: :class:`Mapping`
             A :class:`Mapping` of target (either a role or a member) to
-            :class:`PermissionOverwrite` to apply to the forum.
-        default_auto_archive_duration: :class:`int`
-            The new default auto archive duration in minutes for threads created in this channel.
-            Must be one of ``60``, ``1440``, ``4320``, or ``10080``.
+            :class:`PermissionOverwrite` to apply to the channel.
+
+            .. versionadded:: 1.3
 
         Raises
         ------
-        ValueError
-            The new ``position`` is less than 0 or greater than the number of channels.
-        TypeError
-            The permission overwrite information is not in proper form.
+        InvalidArgument
+            If position is less than 0 or greater than the number of channels, or if
+            the permission overwrite information is not in proper form.
         Forbidden
-            You do not have permissions to edit the forum.
+            You do not have permissions to edit the channel.
         HTTPException
-            Editing the forum failed.
+            Editing the channel failed.
 
         Returns
         --------
-        Optional[:class:`.ForumChannel`]
-            The newly edited forum channel. If the edit was only positional
+        Optional[:class:`.StoreChannel`]
+            The newly edited store channel. If the edit was only positional
             then ``None`` is returned instead.
         """
 
@@ -2137,134 +1703,8 @@ class ForumChannel(discord.abc.GuildChannel, Hashable):
             # the payload will always be the proper channel payload
             return self.__class__(state=self._state, guild=self.guild, data=payload)  # type: ignore
 
-    async def create_thread(
-        self,
-        *,
-        name: str,
-        auto_archive_duration: ThreadArchiveDuration = MISSING,
-        slowmode_delay: Optional[int] = None,
-        content: Optional[str] = None,
-        tts: bool = False,
-        embed: Embed = MISSING,
-        embeds: Sequence[Embed] = MISSING,
-        file: File = MISSING,
-        files: Sequence[File] = MISSING,
-        stickers: Sequence[Union[GuildSticker, StickerItem]] = MISSING,
-        allowed_mentions: AllowedMentions = MISSING,
-        mention_author: bool = MISSING,
-        view: View = MISSING,
-        suppress_embeds: bool = False,
-        reason: Optional[str] = None,
-    ) -> Thread:
-        """|coro|
 
-        Creates a thread in this forum.
-
-        This thread is a public thread with the initial message given. Currently in order
-        to start a thread in this forum, the user needs :attr:`~discord.Permissions.send_messages`.
-
-        Parameters
-        -----------
-        name: :class:`str`
-            The name of the thread.
-        auto_archive_duration: :class:`int`
-            The duration in minutes before a thread is automatically archived for inactivity.
-            If not provided, the channel's default auto archive duration is used.
-        slowmode_delay: Optional[:class:`int`]
-            Specifies the slowmode rate limit for user in this channel, in seconds.
-            The maximum value possible is `21600`. By default no slowmode rate limit
-            if this is ``None``.
-        content: Optional[:class:`str`]
-            The content of the message to send with the thread.
-        tts: :class:`bool`
-            Indicates if the message should be sent using text-to-speech.
-        embed: :class:`~discord.Embed`
-            The rich embed for the content.
-        embeds: List[:class:`~discord.Embed`]
-            A list of embeds to upload. Must be a maximum of 10.
-        file: :class:`~discord.File`
-            The file to upload.
-        files: List[:class:`~discord.File`]
-            A list of files to upload. Must be a maximum of 10.
-        allowed_mentions: :class:`~discord.AllowedMentions`
-            Controls the mentions being processed in this message. If this is
-            passed, then the object is merged with :attr:`~discord.Client.allowed_mentions`.
-            The merging behaviour only overrides attributes that have been explicitly passed
-            to the object, otherwise it uses the attributes set in :attr:`~discord.Client.allowed_mentions`.
-            If no object is passed at all then the defaults given by :attr:`~discord.Client.allowed_mentions`
-            are used instead.
-        mention_author: :class:`bool`
-            If set, overrides the :attr:`~discord.AllowedMentions.replied_user` attribute of ``allowed_mentions``.
-        view: :class:`discord.ui.View`
-            A Discord UI View to add to the message.
-        stickers: Sequence[Union[:class:`~discord.GuildSticker`, :class:`~discord.StickerItem`]]
-            A list of stickers to upload. Must be a maximum of 3.
-        suppress_embeds: :class:`bool`
-            Whether to suppress embeds for the message. This sends the message without any embeds if set to ``True``.
-        reason: :class:`str`
-            The reason for creating a new thread. Shows up on the audit log.
-
-        Raises
-        -------
-        Forbidden
-            You do not have permissions to create a thread.
-        HTTPException
-            Starting the thread failed.
-        ValueError
-            The ``files`` or ``embeds`` list is not of the appropriate size.
-        TypeError
-            You specified both ``file`` and ``files``,
-            or you specified both ``embed`` and ``embeds``.
-
-        Returns
-        --------
-        :class:`Thread`
-            The created thread
-        """
-
-        state = self._state
-        previous_allowed_mention = state.allowed_mentions
-        if stickers is MISSING:
-            sticker_ids = MISSING
-        else:
-            sticker_ids: SnowflakeList = [s.id for s in stickers]
-
-        if view and not hasattr(view, '__discord_ui_view__'):
-            raise TypeError(f'view parameter must be View not {view.__class__!r}')
-
-        if suppress_embeds:
-            from .message import MessageFlags  # circular import
-
-            flags = MessageFlags._from_value(4)
-        else:
-            flags = MISSING
-
-        content = str(content) if content else MISSING
-
-        extras = {
-            'name': name,
-            'auto_archive_duration': auto_archive_duration or self.default_auto_archive_duration,
-            'rate_limit_per_user': slowmode_delay,
-            'type': 11,  # Private threads don't seem to be allowed
-        }
-
-        with handle_message_parameters(
-            content=content,
-            tts=tts,
-            file=file,
-            files=files,
-            embed=embed,
-            embeds=embeds,
-            allowed_mentions=allowed_mentions,
-            previous_allowed_mentions=previous_allowed_mention,
-            mention_author=None if mention_author is MISSING else mention_author,
-            stickers=sticker_ids,
-            view=view,
-            flags=flags,
-            extras=extras,
-        ) as params:
-            data = await state.http.start_thread_in_forum(self.id, params=params, reason=reason)
-            return Thread(guild=self.guild, state=self._state, data=data)
+DMC = TypeVar('DMC', bound='DMChannel')
 
 
 class DMChannel(discord.abc.Messageable, Hashable):
@@ -2308,7 +1748,7 @@ class DMChannel(discord.abc.Messageable, Hashable):
         self.me: ClientUser = me
         self.id: int = int(data['id'])
 
-    async def _get_channel(self) -> Self:
+    async def _get_channel(self):
         return self
 
     def __str__(self) -> str:
@@ -2320,8 +1760,8 @@ class DMChannel(discord.abc.Messageable, Hashable):
         return f'<DMChannel id={self.id} recipient={self.recipient!r}>'
 
     @classmethod
-    def _from_message(cls, state: ConnectionState, channel_id: int) -> Self:
-        self = cls.__new__(cls)
+    def _from_message(cls: Type[DMC], state: ConnectionState, channel_id: int) -> DMC:
+        self: DMC = cls.__new__(cls)
         self._state = state
         self.id = channel_id
         self.recipient = None
@@ -2333,14 +1773,6 @@ class DMChannel(discord.abc.Messageable, Hashable):
     def type(self) -> ChannelType:
         """:class:`ChannelType`: The channel's Discord type."""
         return ChannelType.private
-
-    @property
-    def jump_url(self) -> str:
-        """:class:`str`: Returns a URL that allows the client to jump to the channel.
-
-        .. versionadded:: 2.0
-        """
-        return f'https://discord.com/channels/@me/{self.id}'
 
     @property
     def created_at(self) -> datetime.datetime:
@@ -2358,10 +1790,6 @@ class DMChannel(discord.abc.Messageable, Hashable):
 
         - :attr:`~Permissions.send_tts_messages`: You cannot send TTS messages in a DM.
         - :attr:`~Permissions.manage_messages`: You cannot delete others messages in a DM.
-
-        .. versionchanged:: 2.0
-
-            ``obj`` parameter is now positional-only.
 
         Parameters
         -----------
@@ -2388,10 +1816,6 @@ class DMChannel(discord.abc.Messageable, Hashable):
         doing an unnecessary API call.
 
         .. versionadded:: 1.6
-
-        .. versionchanged:: 2.0
-
-            ``message_id`` parameter is now positional-only.
 
         Parameters
         ------------
@@ -2468,7 +1892,7 @@ class GroupChannel(discord.abc.Messageable, Hashable):
         else:
             self.owner = utils.find(lambda u: u.id == self.owner_id, self.recipients)
 
-    async def _get_channel(self) -> Self:
+    async def _get_channel(self):
         return self
 
     def __str__(self) -> str:
@@ -2500,14 +1924,6 @@ class GroupChannel(discord.abc.Messageable, Hashable):
         """:class:`datetime.datetime`: Returns the channel's creation time in UTC."""
         return utils.snowflake_time(self.id)
 
-    @property
-    def jump_url(self) -> str:
-        """:class:`str`: Returns a URL that allows the client to jump to the channel.
-
-        .. versionadded:: 2.0
-        """
-        return f'https://discord.com/channels/@me/{self.id}'
-
     def permissions_for(self, obj: Snowflake, /) -> Permissions:
         """Handles permission resolution for a :class:`User`.
 
@@ -2521,10 +1937,6 @@ class GroupChannel(discord.abc.Messageable, Hashable):
         - :attr:`~Permissions.manage_messages`: You cannot delete others messages in a DM.
 
         This also checks the kick_members permission if the user is the owner.
-
-        .. versionchanged:: 2.0
-
-            ``obj`` parameter is now positional-only.
 
         Parameters
         -----------
@@ -2566,7 +1978,7 @@ class GroupChannel(discord.abc.Messageable, Hashable):
 
 class PartialMessageable(discord.abc.Messageable, Hashable):
     """Represents a partial messageable to aid with working messageable channels when
-    only a channel ID is present.
+    only a channel ID are present.
 
     The only way to construct this class is through :meth:`Client.get_partial_messageable`.
 
@@ -2598,14 +2010,12 @@ class PartialMessageable(discord.abc.Messageable, Hashable):
 
     def __init__(self, state: ConnectionState, id: int, type: Optional[ChannelType] = None):
         self._state: ConnectionState = state
+        self._channel: Object = Object(id=id)
         self.id: int = id
         self.type: Optional[ChannelType] = type
 
-    def __repr__(self) -> str:
-        return f'<{self.__class__.__name__} id={self.id} type={self.type!r}>'
-
-    async def _get_channel(self) -> PartialMessageable:
-        return self
+    async def _get_channel(self) -> Object:
+        return self._channel
 
     def get_partial_message(self, message_id: int, /) -> PartialMessage:
         """Creates a :class:`PartialMessage` from the message ID.
@@ -2639,10 +2049,10 @@ def _guild_channel_factory(channel_type: int):
         return CategoryChannel, value
     elif value is ChannelType.news:
         return TextChannel, value
+    elif value is ChannelType.store:
+        return StoreChannel, value
     elif value is ChannelType.stage_voice:
         return StageChannel, value
-    elif value is ChannelType.forum:
-        return ForumChannel, value
     else:
         return None, value
 

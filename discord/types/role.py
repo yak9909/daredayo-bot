@@ -24,13 +24,15 @@ DEALINGS IN THE SOFTWARE.
 
 from __future__ import annotations
 
-from typing import TypedDict, Optional
-from typing_extensions import NotRequired
-
+from typing import TypedDict
 from .snowflake import Snowflake
 
 
-class Role(TypedDict):
+class _RoleOptional(TypedDict, total=False):
+    tags: RoleTags
+
+
+class Role(_RoleOptional):
     id: Snowflake
     name: str
     color: int
@@ -39,9 +41,6 @@ class Role(TypedDict):
     permissions: str
     managed: bool
     mentionable: bool
-    icon: NotRequired[Optional[str]]
-    unicode_emoji: NotRequired[Optional[str]]
-    tags: NotRequired[RoleTags]
 
 
 class RoleTags(TypedDict, total=False):

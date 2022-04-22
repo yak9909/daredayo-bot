@@ -25,8 +25,7 @@ DEALINGS IN THE SOFTWARE.
 from __future__ import annotations
 
 from typing import List, Literal, Optional, TypedDict
-from typing_extensions import NotRequired
-from .user import User
+from .user import PartialUser
 from .snowflake import Snowflake
 
 
@@ -34,7 +33,7 @@ StatusType = Literal['idle', 'dnd', 'online', 'offline']
 
 
 class PartialPresenceUpdate(TypedDict):
-    user: User
+    user: PartialUser
     guild_id: Snowflake
     status: StatusType
     activities: List[Activity]
@@ -42,9 +41,9 @@ class PartialPresenceUpdate(TypedDict):
 
 
 class ClientStatus(TypedDict, total=False):
-    desktop: StatusType
-    mobile: StatusType
-    web: StatusType
+    desktop: str
+    mobile: str
+    web: str
 
 
 class ActivityTimestamps(TypedDict, total=False):
@@ -70,10 +69,13 @@ class ActivitySecrets(TypedDict, total=False):
     match: str
 
 
-class ActivityEmoji(TypedDict):
+class _ActivityEmojiOptional(TypedDict, total=False):
+    id: Snowflake
+    animated: bool
+
+
+class ActivityEmoji(_ActivityEmojiOptional):
     name: str
-    id: NotRequired[Snowflake]
-    animated: NotRequired[bool]
 
 
 class ActivityButton(TypedDict):
@@ -81,13 +83,16 @@ class ActivityButton(TypedDict):
     url: str
 
 
+class _SendableActivityOptional(TypedDict, total=False):
+    url: Optional[str]
+
+
 ActivityType = Literal[0, 1, 2, 4, 5]
 
 
-class SendableActivity(TypedDict):
+class SendableActivity(_SendableActivityOptional):
     name: str
     type: ActivityType
-    url: NotRequired[Optional[str]]
 
 
 class _BaseActivity(SendableActivity):
@@ -107,4 +112,3 @@ class Activity(_BaseActivity, total=False):
     session_id: Optional[str]
     instance: bool
     buttons: List[ActivityButton]
-    sync_id: str

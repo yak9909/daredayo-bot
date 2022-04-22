@@ -46,20 +46,18 @@ class WidgetMember(User, total=False):
     suppress: bool
 
 
-class Widget(TypedDict):
-    id: Snowflake
-    name: str
-    instant_invite: Optional[str]
+class _WidgetOptional(TypedDict, total=False):
     channels: List[WidgetChannel]
     members: List[WidgetMember]
     presence_count: int
 
 
+class Widget(_WidgetOptional):
+    id: Snowflake
+    name: str
+    instant_invite: str
+
+
 class WidgetSettings(TypedDict):
-    enabled: bool
-    channel_id: Optional[Snowflake]
-
-
-class EditWidgetSettings(TypedDict, total=False):
     enabled: bool
     channel_id: Optional[Snowflake]
