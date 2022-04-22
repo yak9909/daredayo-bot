@@ -13,17 +13,19 @@ config = yktool.load_config()
 
 # メインクラス
 class Main(commands.Bot):
-    def __init__(self, command_prefix):
-        super().__init__(command_prefix)
+    def __init__(self, intents, command_prefix):
+        super().__init__(intents=intents, command_prefix=command_prefix)
+        self.help_command = None
+
+    async def on_ready(self):
 
         # コグ読み込み
         for cog in yktool.load_cogs():
             try:
-                self.load_extension(cog)
+                await self.load_extension(cog)
             except Exception:
                 traceback.print_exc()
 
-    async def on_ready(self):
         print('-'*20)
         print()
         print('ログインしました。')

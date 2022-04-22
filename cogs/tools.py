@@ -32,15 +32,18 @@ def url2id(video_url: str):
 class Tools(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-    
+
+    # 機械語(16進数) から ARM Little Endian に変換 (with ARM Converter API)
     @commands.command()
     async def hextoarm(self, ctx: commands.Context):
         pass
-    
+
+    # ARM Little Endian から 機械語(16進数) に変換 (with ARM Converter API)
     @commands.command()
     async def armtohex(self, ctx: commands.Context):
         pass
 
+    # YouTube でアクセスできなくなった動画のアーカイブを検索
     @commands.command()
     async def archive(self, ctx: commands.Context, video):
         video_id = video
@@ -59,6 +62,7 @@ class Tools(commands.Cog):
         else:
             await ctx.send("アーカイブは見つかりませんでした…")
 
+    # purge
     @commands.command()
     async def purge(self, ctx: commands.Context, arg1, arg2=None):
         if yktool.is_moderator(ctx.author.id):
@@ -162,5 +166,5 @@ class Tools(commands.Cog):
 
 
 # コグをセットアップするために必要
-def setup(bot):
-    bot.add_cog(Tools(bot))
+async def setup(bot):
+    await bot.add_cog(Tools(bot))
