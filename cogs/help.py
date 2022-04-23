@@ -76,9 +76,12 @@ class HelpView(discord.ui.View):
 
         for i in range(self.current_page*self.max_items, min((self.current_page*self.max_items+self.max_items, self.command_count))):
             current_command = self.help_dropdown.selected["commands"][i]
+            description = current_command["description"]
+            usage = current_command["usage"].replace("%prefix%", self.prefix)
+
             embed.add_field(
                 name=self.prefix + current_command["command"],
-                value=f'{current_command["description"]}\n\n__**使い方**__\n```{current_command["usage"].replace("%prefix%", self.prefix)}\n```\n――――――――――――――――',
+                value=f'{description}\n\n__**使い方**__\n```{usage}\n```\n――――――――――――――――',
                 inline=False
             )
 

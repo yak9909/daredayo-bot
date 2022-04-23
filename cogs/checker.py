@@ -64,6 +64,12 @@ class Checker(commands.Cog):
                 aori_messages += [
                     f"`{wrong}` じゃなく、 `AviUtl` だぞ？？今後このような間違えはしないようにねｗ スペルミスは、死ゾ！！ｗ",
                     f"{wrong} ってなんすかｗ\nもしかして **AviUtl** のことっすか？ｗ",
+                    f"そっちの世界、`AviUtl` のこと {wrong} って言うんすねｗダサｗ",
+                    f"なに {wrong} って　**AviUtl** なら知ってるけど {wrong} は知らんわｗ\n{wrong} ってのがあるん？ｗ",
+                    f"はいはーい {wrong} じゃなくて **AviUtl** ねー　間違えないようにしてねー",
+                    f"{wrong} …ｗ　いやごめんｗ `AviUtl` のこと {wrong} って呼ぶ人、なんか頭悪そうで…あいやｗごめんｗ",
+                    f":x: {wrong}\n:o: AviUtl\n\nこんな一般常識も知らないんスカｗ",
+                    f"うーわ…たまにいるんだよね **AviUtl** を aviutl だとか Aviutl だとか言う人ｗ\nいつも {wrong} って呼び方してるわけ？ｗ",
                     f"{wrong}…面白い冗談ですね、**AviUtl**をそのように表記するとは。\nスペル…**AviUtl**が正式名称ですよ。\nhttp://spring-fragrance.mints.ne.jp/aviutl/"
                 ]
         
@@ -99,7 +105,7 @@ class Checker(commands.Cog):
 
                         # アーカイブの取得
                         async with channel.typing():
-                            archive = tools.get_video_archive()
+                            archive = tools.get_video_archive(video_id)
 
                         if archive:
                             embed = discord.Embed(title="アーカイブが見つかりました！", description=f"[アーカイブURL]({archive})")

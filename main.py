@@ -25,6 +25,8 @@ class Main(commands.Bot):
                 traceback.print_exc()
 
     async def on_ready(self):
+        custom = discord.Game(f"{self.command_prefix}help")
+        await self.change_presence(activity=custom)
 
         print('-'*20)
         print()
