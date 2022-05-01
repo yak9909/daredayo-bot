@@ -110,6 +110,29 @@ class Tools(commands.Cog):
             f"{self.bot.command_prefix}purge (<メッセージ削除数> | <削除開始メッセージID> <削除終了メッセージID>)"
             "\n```"
         )
+    
+    @commands.command()
+    async def test(self, ctx: commands.Context, url):
+        video_id = url2id(url)
+        video_url = "https://www.youtube.com/oembed?url=http://www.youtube.com/watch?v=" + video_id
+        res = requests.get(video_url).json()
+        embed = discord.Embed(title=res["title"], description=f'アップローダー: [{res["author_name"]}]({res["author_url"]})', url=f'https://youtu.be/{video_id}')
+        embed.set_thumbnail(url=res["thumbnail_url"])
+        await ctx.send(embed=embed)
+    
+    @commands.command()
+    async def reload(self, ctx: commands.Context):
+        if yktool.is_moderator(ctx.author.id):
+            # コグ読み込み
+            for cog in yktool.load_cogs():
+                self.bot.reload_extension(cog)
+            await ctx.message.add_reaction("✅")
+        else:
+            await ctx.message.add_reaction("❓")
+    
+    @reload.error
+    async def reload_error(self, ctx: commands.Context, error: discord.ext.commands.CommandError):
+        await ctx.message.add_reaction("❌")
 
     # メッセージを受信すると呼び出されるメソッド
     @commands.Cog.listener()

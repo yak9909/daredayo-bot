@@ -83,35 +83,59 @@ class Checker(commands.Cog):
             await message.channel.send(f"helpコマンドは `{self.bot.command_prefix}help` と送信する事で実行できます", delete_after=8)
 
         if url := find_url(message.content):
+            if len(url) == 1 and "discord.com/channels/" in url[0]:
+                if str(message.guild.id) == url[0].split("/")[-3]:
+                    await message.add_reaction("⤵️")
+
+        if url := find_url(message.content):
             if len(url) == 1 and url[0].startswith(("https://www.youtube.com/", "https://youtu.be/")):
                 if not check_video_url(tools.url2id(url[0])):
                     await message.add_reaction("🔍")
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
+        if payload.user_id == self.bot.user.id:
+            return
+    
         channel: discord.TextChannel = await self.bot.fetch_channel(payload.channel_id)
         message = await channel.fetch_message(payload.message_id)
-
-        search_emoji = discord.utils.find(lambda m: m.emoji == "🔍", message.reactions)
+        search_emoji = discord.utils.find(lambda m: m.emoji == str(payload.emoji), message.reactions)
 
         if search_emoji and message.author.id == payload.user_id:
             if [x async for x in search_emoji.users() if x.id == self.bot.user.id]:
-                if url := find_url(message.content):
-                    if len(url) == 1 and url[0].startswith(("https://www.youtube.com/", "https://youtu.be/")):
-                        video_id = tools.url2id(url[0])
+            
+                # アクセスが出来なくなったYouTube動画のアーカイブ検索
+                if str(payload.emoji) == "🔍":
+                    if url := find_url(message.content):
+                        if len(url) == 1 and url[0].startswith(("https://www.youtube.com/", "https://youtu.be/")):
+                            video_id = tools.url2id(url[0])
 
-                        await message.clear_reaction("🔍")
-                        await message.reply(f"https://youtu.be/{video_id} のアーカイブを取得します…", mention_author=False)
+                            await message.clear_reaction("🔍")
+                            await message.reply(f"https://youtu.be/{video_id} のアーカイブを取得します…", mention_author=False)
 
-                        # アーカイブの取得
-                        async with channel.typing():
-                            archive = tools.get_video_archive(video_id)
+                            # アーカイブの取得
+                            async with channel.typing():
+                                archive = tools.get_video_archive(video_id)
 
-                        if archive:
-                            embed = discord.Embed(title="アーカイブが見つかりました！", description=f"[アーカイブURL]({archive})")
-                            await channel.send(embed=embed)
-                        else:
-                            await channel.send("アーカイブは見つかりませんでした…")
+                            if archive:
+                                embed = discord.Embed(title="アーカイブが見つかりました！", description=f"[アーカイブURL]({archive})")
+                                await channel.send(embed=embed)
+                            else:
+                                await channel.send("アーカイブは見つかりませんでした…")
+        
+                # メッセージの引用
+                if str(payload.emoji) == "⤵️":
+                    if url := find_url(message.content):
+                        async with message.channel.typing():
+                            await message.clear_reaction("⤵️")
+                            chid = url[0].split("/")[-2]
+                            msgid = url[0].split("/")[-1]
+                            quote_channel = await message.guild.fetch_channel(chid)
+                            quote_message = await quote_channel.fetch_message(msgid)
+                            embed = discord.Embed(title=quote_message.author.display_name, description=quote_message.content + f"\n\n[メッセージにジャンプ]({url[0]})")
+                            embed.set_thumbnail(url=quote_message.author.avatar.url)
+                            embed.set_footer(text=f"{message.author.display_name} が引用: #{quote_channel.name}", icon_url=message.author.avatar.url)
+                        await message.reply(embed=embed, mention_author=False)
 
 
 # コグをセットアップするために必要
