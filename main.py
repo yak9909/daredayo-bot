@@ -31,7 +31,7 @@ class Main(commands.Bot):
         print('-'*20)
         print()
         print('ログインしました。')
-        print('Development by 誰？#6140')
+        print('Development by やくると#6140')
         print()
         print('-'*20)
         print()

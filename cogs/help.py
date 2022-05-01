@@ -85,15 +85,8 @@ class HelpView(discord.ui.View):
                 inline=False
             )
 
-        if self.current_page <= 0:
-            self.previous.disabled = True
-        else:
-            self.previous.disabled = False
-
-        if self.current_page >= self.max_page:
-            self.next.disabled = True
-        else:
-            self.next.disabled = False
+        self.previous.disabled = self.current_page <= 0
+        self.next.disabled = self.current_page >= self.max_page
 
         return embed
 
