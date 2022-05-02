@@ -27,6 +27,14 @@ def check_video_url(video_id):
     return request.status_code == 200
 
 
+async def get_quoter_webhook(channel):
+    quote_webhook = discord.utils.find(lambda m: m.name == "Quoter", await channel.webhooks())
+    if not quote_webhook:
+        quote_webhook = await channel.create_webhook(name="Quoter")
+
+    return quote_webhook
+
+
 class Checker(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -144,10 +152,35 @@ class Checker(commands.Cog):
                             msgid = url[0].split("/")[-1]
                             quote_channel = await message.guild.fetch_channel(chid)
                             quote_message = await quote_channel.fetch_message(msgid)
-                            embed = discord.Embed(title=quote_message.author.display_name, description=quote_message.content + f"\n\n[メッセージにジャンプ]({url[0]})")
-                            embed.set_thumbnail(url=quote_message.author.avatar.url)
-                            embed.set_footer(text=f"{message.author.display_name} が引用: #{quote_channel.name}", icon_url=message.author.avatar.url)
-                        await message.reply(embed=embed, mention_author=False)
+                            embed = discord.Embed(description=f"\n\n[メッセージにジャンプ]({url[0]})")
+                            embed.set_author(name=f"{message.author.display_name} が引用", icon_url=message.author.avatar.url)
+                            embed.set_footer(text=f"#{quote_channel.name}")
+                        webhook = await get_quoter_webhook(channel)
+
+                        # メンションを無効化する
+                        content = quote_message.content
+                        for i in quote_message.mentions:
+                            content = content.replace(i.mention, f"@ {i.name}")
+                        for i in quote_message.role_mentions:
+                            content = content.replace(i.mention, f"@ {i.name}")
+                        content = content.replace("@everyone", "@ everyone")
+                        content = content.replace("@here", "@ here")
+
+                        try:
+                            await webhook.send(
+                                content=content,
+                                embed=embed,
+                                username=quote_message.author.name,
+                                avatar_url=quote_message.author.avatar.url,
+                                files=[await x.to_file() for x in quote_message.attachments]
+                            )
+                        except discord.errors.HTTPException:
+                            await webhook.send(
+                                content=content,
+                                embed=embed,
+                                username=quote_message.author.name,
+                                avatar_url=quote_message.author.avatar.url
+                            )
 
 
 # コグをセットアップするために必要

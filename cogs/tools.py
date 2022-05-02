@@ -133,6 +133,7 @@ class Tools(commands.Cog):
     @reload.error
     async def reload_error(self, ctx: commands.Context, error: discord.ext.commands.CommandError):
         await ctx.message.add_reaction("❌")
+        print(error)
 
     # メッセージを受信すると呼び出されるメソッド
     @commands.Cog.listener()
