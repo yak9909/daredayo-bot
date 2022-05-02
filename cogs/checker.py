@@ -46,15 +46,14 @@ class Checker(commands.Cog):
         for i in find_url(check_text):
             check_text = check_text.replace(i, "")
 
-        matches = re.findall(r'(aviutl|aviutil)', check_text, flags=re.IGNORECASE)
+        matches = re.findall(r'(aviutl.exe|aviutl|aviutil)', check_text, flags=re.IGNORECASE)
     
         # AviUtl をスペルミスしてないか確認
-        if wrong := [x for x in matches if not x == "AviUtl"]:
+        if wrong := [x for x in matches if not [y for y in ["aviutl.exe", "AviUtl"] if y == x]]:
             # 煽りメッセージの定義
             aori_messages = [
                 "`AviUtl`、ねｗ　二度と間違えないでもろてｗ",
                 "`AviUtl` だカス　間違えるなボケカスアホ　カス\n\nアホ",
-                "おっと。正しいスペルは `AviUtl` です。これを見てください。\nhttp://spring-fragrance.mints.ne.jp/aviutl/\nサイト名にも書いてあるように、 `AviUtl` が正しいスペルですので、間違えないようにしましょうね。ｗ",
                 "**AviUtl** だが？ｗ"
             ]
             
@@ -69,12 +68,25 @@ class Checker(commands.Cog):
                     f"はいはーい {wrong} じゃなくて **AviUtl** ねー　間違えないようにしてねー",
                     f"{wrong} …ｗ　いやごめんｗ `AviUtl` のこと {wrong} って呼ぶ人、なんか頭悪そうで…あいやｗごめんｗ",
                     f":x: {wrong}\n:o: AviUtl\n\nこんな一般常識も知らないんスカｗ",
+                ]
+            
+            
+            
+            if wrong.lower() == "aviutl.exe":
+                aori_msg = random.choice(aori_messages)
+                aori_msg = aori_msg.replace(wrong, "XXX")
+                aori_msg = aori_msg.replace("AviUtl", "aviutl.exe")
+                aori_msg = aori_msg.replace("XXX", wrong)
+            else:
+                aori_messages += [
                     f"うーわ…たまにいるんだよね **AviUtl** を aviutl だとか Aviutl だとか言う人ｗ\nいつも {wrong} って呼び方してるわけ？ｗ",
+                    "おっと。正しいスペルは `AviUtl` です。これを見てください。\nhttp://spring-fragrance.mints.ne.jp/aviutl/\nサイト名にも書いてあるように、 `AviUtl` が正しいスペルですので、間違えないようにしましょうね。ｗ",
                     f"{wrong}…面白い冗談ですね、**AviUtl**をそのように表記するとは。\nスペル…**AviUtl**が正式名称ですよ。\nhttp://spring-fragrance.mints.ne.jp/aviutl/"
                 ]
+                aori_msg = random.choice(aori_messages)
         
             # ランダムで煽る
-            await message.reply(random.choice(aori_messages))
+            await message.reply(aori_msg)
 
         if message.content.startswith(self.bot.command_prefix):
             return
