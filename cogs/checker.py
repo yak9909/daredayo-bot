@@ -121,6 +121,10 @@ class Checker(commands.Cog):
         message = await channel.fetch_message(payload.message_id)
         search_emoji = discord.utils.find(lambda m: m.emoji == str(payload.emoji), message.reactions)
 
+        if str(payload.emoji) == "🔀":
+            shuffled_msg = ''.join(random.sample(message.content, len(message.content)))
+            await message.reply(shuffled_msg, mention_author=False)
+
         if search_emoji and message.author.id == payload.user_id:
             if [x async for x in search_emoji.users() if x.id == self.bot.user.id]:
             
