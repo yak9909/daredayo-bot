@@ -21,6 +21,11 @@
         "command": "purge",
         "description": "渡された引数に従ってメッセージを削除していきます bot開発者のみ有効",
         "usage": "%prefix%purge (<メッセージ削除数> | <削除開始メッセージID> <削除終了メッセージID>)\n\n%prefix%purge 5\n最後のメッセージから 5つのメッセージまでを削除\n\n%prefix%purge 1234 5678\nIDが1234のメッセージから IDが5678のメッセージまでを削除"
+      },
+      {
+        "command": "chord",
+        "description": "渡された音名からコード名を出力してくれます\nhttps://kkkgg.github.io/chord_finder/index.html からプログラム拝借しました（クズ）",
+        "usage": "%prefix%chord C E G\n%prefix%chord E G B"
       }
     ]
   },

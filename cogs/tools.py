@@ -2,7 +2,7 @@ from discord.ext import commands
 import discord
 import requests
 import json
-from modules import yktool
+from modules import yktool, chord_finder
 import urllib.parse
 
 
@@ -119,6 +119,15 @@ class Tools(commands.Cog):
         embed = discord.Embed(title=res["title"], description=f'アップローダー: [{res["author_name"]}]({res["author_url"]})', url=f'https://youtu.be/{video_id}')
         embed.set_thumbnail(url=res["thumbnail_url"])
         await ctx.send(embed=embed)
+    
+    @commands.command(name="chord")
+    async def chord_find(self, ctx: commands.Context, *args):
+        result = chord_finder.find("".join(args))
+        if result == "undefined":
+            await ctx.send("コードが見つかりませんでした…")
+            return
+
+        await ctx.send(f'{" ".join(args)} のコード名は **{result}** です')
     
     @commands.command()
     async def reload(self, ctx: commands.Context):
