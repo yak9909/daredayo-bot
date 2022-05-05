@@ -4,6 +4,7 @@ import requests
 import json
 from modules import yktool, chord_finder
 import urllib.parse
+import re
 
 
 def get_redirect_url(url):
@@ -128,7 +129,55 @@ class Tools(commands.Cog):
             return
 
         await ctx.send(f'{" ".join(args)} のコード名は **{result}** です')
-    
+
+    @commands.command()
+    async def chtest(self, ctx: commands.Context, chord):
+        chord_st = {
+            "root": 0,
+            "2": -1,
+            "3rd": 4,
+            "4th": 7,
+            "5th": -1,
+            "-5": -1,
+            "+5": -1,
+            "6": -1,
+            "7th": -1,
+            "maj7": -1
+        }
+
+        key = 0
+
+        chord_reference = json.load(open("./data/chord.json", encoding="utf-8"))
+
+        xx = "|".join(list(chord_reference["chord"].keys())).replace("+", "\\+")
+        """
+        #ch = re.findall(r'(' + xx + r')', chord)
+        seiki = r"^[A-G](#|b)?(-5|((add9|add2|add4)|(m|aug|dim)?((M7|M9|7|6?9?|11|12)((-|\+(5|9|11)).)?)?(sus4|sus2)?))(/[A-G](#|b)?)?$"
+        #ch = [x[0] for x in re.findall(seiki, chord)[1:-1]]
+
+        if len(chord) >= 3:
+            await ctx.send("コード名に誤りがあるようです!")
+            return
+        """
+
+        note = re.match(r"[A-G]#?m?", chord).group()
+        ch = re.finditer(r"(M7|[67]|add9|sus4|aug|dim|[\+-](5|9|11|13)|/(9|11|13))", chord)
+        ch = [x.group() for x in ch]
+
+        key = [int(k) for k, v in chord_reference["note"].items() if v[0] in note][-1]
+
+        for v in chord_reference['chord'].keys():
+            if v in ch:
+                chord_st.update(chord_reference['chord'][v])
+
+        chord_st = {k: ((12 + v + key) % 12) for k, v in chord_st.items() if not v == -1}
+        result = []
+
+        for i in chord_st.values():
+            result.append(str(i).replace(str(i), chord_reference["note"][str(i)][0]))
+
+        await ctx.send(" ".join(result))
+
     @commands.command()
     async def reload(self, ctx: commands.Context):
         if yktool.is_moderator(ctx.author.id):

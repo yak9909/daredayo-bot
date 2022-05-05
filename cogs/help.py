@@ -77,11 +77,11 @@ class HelpView(discord.ui.View):
         for i in range(self.current_page*self.max_items, min((self.current_page*self.max_items+self.max_items, self.command_count))):
             current_command = self.help_dropdown.selected["commands"][i]
             description = current_command["description"]
-            usage = current_command["usage"].replace("%prefix%", self.prefix)
+            usage = current_command["usage"].replace("%command%", self.prefix + current_command["command"])
 
             embed.add_field(
-                name=self.prefix + current_command["command"],
-                value=f'{description}\n\n__**使い方**__\n```{usage}\n```\n――――――――――――――――',
+                name=f'――――――――――――――――\n{self.prefix}{current_command["command"]}',
+                value=f'{description}\n\n__**使い方**__\n```{usage}\n```',
                 inline=False
             )
 
@@ -89,16 +89,23 @@ class HelpView(discord.ui.View):
         self.next.disabled = self.current_page >= self.max_page
 
         return embed
+    
+    def search(self, query, category=None):
+        for category in self.references.keys():
+            return [x for x in [command["command"] for command in self.references[category]["commands"]] if query in x]
 
 
 class Help(commands.Cog):
     def __init__(self, bot):
         self.bot: commands.Bot = bot
         self.help_path = "data/help.json"
+        self.max_items = 2
 
     @commands.command(name="help")
     async def help_command(self, ctx: commands.Context, query=None):
         if query:
+            help_view = HelpView(self.help_path, self.max_items)
+            await ctx.send(help_view.search(query))
             return
 
         embed = discord.Embed(
@@ -108,7 +115,7 @@ class Help(commands.Cog):
             "コマンドのカテゴリーを選択してください"
         )
 
-        category_view = HelpView(self.help_path, 2)
+        category_view = HelpView(self.help_path, self.max_items)
 
         await ctx.send(embed=embed, view=category_view)
 
