@@ -67,19 +67,18 @@ class Checker(commands.Cog):
             
             # 一回のみのスペルミスだったら:
             if len(wrong) == 1:
-                wrong = wrong[0]
                 aori_messages += [
-                    f"`{wrong}` じゃなく、 `AviUtl` だぞ？？今後このような間違えはしないようにねｗ スペルミスは、死ゾ！！ｗ",
-                    f"{wrong} ってなんすかｗ\nもしかして **AviUtl** のことっすか？ｗ",
-                    f"そっちの世界、`AviUtl` のこと {wrong} って言うんすねｗダサｗ",
-                    f"なに {wrong} って　**AviUtl** なら知ってるけど {wrong} は知らんわｗ\n{wrong} ってのがあるん？ｗ",
-                    f"はいはーい {wrong} じゃなくて **AviUtl** ねー　間違えないようにしてねー",
-                    f"{wrong} …ｗ　いやごめんｗ `AviUtl` のこと {wrong} って呼ぶ人、なんか頭悪そうで…あいやｗごめんｗ",
-                    f":x: {wrong}\n:o: AviUtl\n\nこんな一般常識も知らないんスカｗ",
+                    f"`{wrong[0]}` じゃなく、 `AviUtl` だぞ？？今後このような間違えはしないようにねｗ スペルミスは、死ゾ！！ｗ",
+                    f"{wrong[0]} ってなんすかｗ\nもしかして **AviUtl** のことっすか？ｗ",
+                    f"そっちの世界、`AviUtl` のこと {wrong[0]} って言うんすねｗダサｗ",
+                    f"なに {wrong[0]} って　**AviUtl** なら知ってるけど {wrong[0]} は知らんわｗ\n{wrong[0]} ってのがあるん？ｗ",
+                    f"はいはーい {wrong[0]} じゃなくて **AviUtl** ねー　間違えないようにしてねー",
+                    f"{wrong[0]} …ｗ　いやごめんｗ `AviUtl` のこと {wrong[0]} って呼ぶ人、なんか頭悪そうで…あいやｗごめんｗ",
+                    f":x: {wrong[0]}\n:o: AviUtl\n\nこんな一般常識も知らないんスカｗ",
                 ]
-            
-            
-            
+
+            wrong = wrong[0]
+
             if wrong.lower() == "aviutl.exe":
                 aori_msg = random.choice(aori_messages)
                 aori_msg = aori_msg.replace(wrong, "XXX")
@@ -164,11 +163,11 @@ class Checker(commands.Cog):
                         # メンションを無効化する
                         content = quote_message.content
                         for i in quote_message.mentions:
-                            content = content.replace(i.mention, f"@ {i.name}")
+                            content = content.replace(i.mention, f"@‌{i.name}")
                         for i in quote_message.role_mentions:
-                            content = content.replace(i.mention, f"@ {i.name}")
-                        content = content.replace("@everyone", "@ everyone")
-                        content = content.replace("@here", "@ here")
+                            content = content.replace(i.mention, f"@‌{i.name}")
+                        content = content.replace("@everyone", "@‌everyone")
+                        content = content.replace("@here", "@‌here")
 
                         try:
                             await webhook.send(
