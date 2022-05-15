@@ -3,8 +3,8 @@ import discord
 import random
 import re
 import requests
-from cogs import tools
-from cogs import help
+from cogs import tools, help
+from modules import ytpy
 
 
 # 文字列内からURLを抽出
@@ -17,14 +17,6 @@ def find_url(text):
 def find_token(text):
     token = re.findall(r'[M-Z][A-Za-z\d]{23}\.[\w-]{6}\.[\w-]{27}', text)
     return token
-
-
-def check_video_url(video_id):
-    checker_url = "https://www.youtube.com/oembed?url=http://www.youtube.com/watch?v="
-    video_url = checker_url + video_id
-    request = requests.get(video_url)
-
-    return request.status_code == 200
 
 
 async def get_quoter_webhook(channel):
@@ -107,8 +99,8 @@ class Checker(commands.Cog):
                     await message.add_reaction("⤵️")
 
         if url := find_url(message.content):
-            if len(url) == 1 and url[0].startswith(("https://www.youtube.com/", "https://youtu.be/")):
-                if not check_video_url(tools.url2id(url[0])):
+            if len(url) == 1 and re.match(r'^https?://(www.youtube.com|youtu.be)/', url[0]):
+                if not ytpy.is_video_available(ytpy.url2id(url[0])):
                     await message.add_reaction("🔍")
 
     @commands.Cog.listener()
@@ -130,18 +122,22 @@ class Checker(commands.Cog):
                 # アクセスが出来なくなったYouTube動画のアーカイブ検索
                 if str(payload.emoji) == "🔍":
                     if url := find_url(message.content):
-                        if len(url) == 1 and url[0].startswith(("https://www.youtube.com/", "https://youtu.be/")):
-                            video_id = tools.url2id(url[0])
+                        if len(url) == 1 and re.match(r'^https?://(www.youtube.com|youtu.be)/', url[0]):
+                            video_id = ytpy.url2id(url[0])
 
                             await message.clear_reaction("🔍")
                             await message.reply(f"https://youtu.be/{video_id} のアーカイブを取得します…", mention_author=False)
 
                             # アーカイブの取得
                             async with channel.typing():
-                                archive = tools.get_video_archive(video_id)
+                                archive = ytpy.YouTubeArchive(url[0])
 
-                            if archive:
-                                embed = discord.Embed(title="アーカイブが見つかりました！", description=f"[アーカイブURL]({archive})")
+                            if archive.url:
+                                # 動画情報の取得
+                                #async with channel.typing():
+                                #    info = archive.get_info()
+
+                                embed = discord.Embed(title="アーカイブが見つかりました！", description=f'[アーカイブURL]({archive.url})')
                                 await channel.send(embed=embed)
                             else:
                                 await channel.send("アーカイブは見つかりませんでした…")
