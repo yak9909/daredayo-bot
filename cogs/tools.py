@@ -3,11 +3,7 @@ import discord
 import requests
 import json
 from modules import yktool, chord_finder, ytpy
-import urllib.parse, urllib.request
 import re
-from bs4 import BeautifulSoup
-import lxml
-import lxml.html
 
 
 class Tools(commands.Cog):
@@ -27,12 +23,17 @@ class Tools(commands.Cog):
     # YouTube でアクセスできなくなった動画のアーカイブを検索
     @commands.command()
     async def archive(self, ctx: commands.Context, video):
-        await ctx.send(f"https://youtu.be/{ytpy.url2id(video)} のアーカイブを取得します…")
+        if re.match(r'^https?://', video):
+            if not ytpy.is_youtube(video):
+                await ctx.send("YouTube動画のURLを入力してください！")
+                return
 
-        if video.startswith(("http://", "https://")):
-            # アーカイブの取得
-            async with ctx.channel.typing():
-                archive = ytpy.YouTubeArchive(video)
+        video = ytpy.Video(video)
+        await ctx.send(f"{video.url} のアーカイブを取得します…")
+
+        # アーカイブの取得
+        async with ctx.channel.typing():
+            archive = ytpy.Archive(video.url)
 
         if archive.url:
             # 動画情報の取得
@@ -95,11 +96,10 @@ class Tools(commands.Cog):
     
     @commands.command()
     async def test(self, ctx: commands.Context, url):
-        video_id = url2id(url)
-        video_url = "https://www.youtube.com/oembed?url=http://www.youtube.com/watch?v=" + video_id
-        res = requests.get(video_url).json()
-        embed = discord.Embed(title=res["title"], description=f'アップローダー: [{res["author_name"]}]({res["author_url"]})', url=f'https://youtu.be/{video_id}')
-        embed.set_thumbnail(url=res["thumbnail_url"])
+        video = ytpy.Video(url)
+        video_info = video.get_video_info()
+        embed = discord.Embed(title=video_info["title"], description=f'アップローダー: [{video_info["author_name"]}]({video_info["author_url"]})', url=video.url)
+        embed.set_thumbnail(url=video_info["thumbnail_url"])
         await ctx.send(embed=embed)
 
     @commands.command()

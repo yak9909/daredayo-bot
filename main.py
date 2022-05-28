@@ -3,8 +3,6 @@ from discord.ext import commands
 import traceback
 from modules import yktool
 import os
-import math
-import asyncio
 
 
 # コンフィグを読み込む

@@ -99,8 +99,8 @@ class Checker(commands.Cog):
                     await message.add_reaction("⤵️")
 
         if url := find_url(message.content):
-            if len(url) == 1 and re.match(r'^https?://(www.youtube.com|youtu.be)/', url[0]):
-                if not ytpy.is_video_available(ytpy.url2id(url[0])):
+            if len(url) == 1 and ytpy.is_youtube(url[0]):
+                if not ytpy.Video(url[0]).is_available():
                     await message.add_reaction("🔍")
 
     @commands.Cog.listener()
@@ -122,15 +122,15 @@ class Checker(commands.Cog):
                 # アクセスが出来なくなったYouTube動画のアーカイブ検索
                 if str(payload.emoji) == "🔍":
                     if url := find_url(message.content):
-                        if len(url) == 1 and re.match(r'^https?://(www.youtube.com|youtu.be)/', url[0]):
-                            video_id = ytpy.url2id(url[0])
+                        if len(url) == 1 and ytpy.is_youtube(url[0]):
+                            video = ytpy.Video(url[0])
 
                             await message.clear_reaction("🔍")
-                            await message.reply(f"https://youtu.be/{video_id} のアーカイブを取得します…", mention_author=False)
+                            await message.reply(f"{video.url} のアーカイブを取得します…", mention_author=False)
 
                             # アーカイブの取得
                             async with channel.typing():
-                                archive = ytpy.YouTubeArchive(url[0])
+                                archive = ytpy.Archive(video.url)
 
                             if archive.url:
                                 # 動画情報の取得

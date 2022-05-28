@@ -23,15 +23,31 @@ def url2id(video_url: str):
     return video_id
 
 
-def is_video_available(video_id):
-    checker_url = "https://www.youtube.com/oembed?url=http://www.youtube.com/watch?v="
-    video_url = checker_url + video_id
-    request = requests.get(video_url)
-
-    return request.status_code == 200
+def is_youtube(url):
+    if re.match(r'^https?://(www.youtube.com|youtu.be)/', url):
+        return True
+    return False
 
 
-class YouTubeArchive:
+class Video:
+    def __init__(self, video):
+        self.id = url2id(video) if is_youtube(video) else video
+        self.url = "https://youtu.be/" + self.id
+        self.oembed_url = "https://www.youtube.com/oembed?url=http://www.youtube.com/watch?v=" + self.id
+        self.oembed_response = requests.get(self.oembed_url)
+
+    def get_video_info(self):
+        return self.oembed_response.json() if self.oembed_response.status_code == 200 else None
+
+    def is_available(self):
+        return self.oembed_response.status_code == 200
+
+    def update_oembed(self):
+        self.oembed_response = requests.get(self.oembed_url)
+        return self.oembed_response
+
+
+class Archive():
     def __init__(self, url):
         self.id = url2id(url)
 
