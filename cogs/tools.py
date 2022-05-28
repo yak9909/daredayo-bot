@@ -109,8 +109,8 @@ class Tools(commands.Cog):
         embed = discord.Embed(title=res["author_name"], description=res["html"], url=res["author_url"])
         await ctx.send(embed=embed)
 
-    @commands.command(name="chord")
-    async def chord_find(self, ctx: commands.Context, *args):
+    @commands.command(aliases=["n2c", "chord"])
+    async def notes2chord(self, ctx: commands.Context, *args):
         result = chord_finder.find("".join(args))
         if result == "undefined":
             await ctx.send("コードが見つかりませんでした…")
@@ -118,8 +118,8 @@ class Tools(commands.Cog):
 
         await ctx.send(f'{" ".join(args)} のコード名は **{result}** です')
 
-    @commands.command()
-    async def chtest(self, ctx: commands.Context, chord):
+    @commands.command(aliases=["c2n", "note"])
+    async def chord2notes(self, ctx: commands.Context, chord):
         chord_st = {
             "root": 0,
             "2": -1,
@@ -148,8 +148,8 @@ class Tools(commands.Cog):
             return
         """
 
-        note = re.match(r"[A-G]#?m?", chord).group()
-        ch = re.finditer(r"(M7|[67]|add9|sus4|aug|dim|[\+-](5|9|11|13)|/(9|11|13))", chord)
+        note = re.match(r"[A-G]#?", chord).group()
+        ch = re.finditer(r"(m|M7|[67]|add9|sus4|aug|dim|[\+-](5|9|11|13)|/(9|11|13))", chord)
         ch = [x.group() for x in ch]
 
         key = [int(k) for k, v in chord_reference["note"].items() if v[0] in note][-1]

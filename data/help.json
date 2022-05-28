@@ -23,9 +23,14 @@
         "usage": "%command% (<メッセージ削除数> | <削除開始メッセージID> <削除終了メッセージID>)\n\n%command% 5\n最後のメッセージから 5つのメッセージまでを削除\n\n%command% 1234 5678\nIDが1234のメッセージから IDが5678のメッセージまでを削除"
       },
       {
-        "command": "chord",
-        "description": "渡された音名からコード名を出力してくれます\nhttps://kkkgg.github.io/chord_finder/index.html からプログラム拝借しました（クズ）",
+        "command": "notes2chord",
+        "description": "構成音からコード名を出力してくれます\nhttps://kkkgg.github.io/chord_finder/index.html からプログラム拝借しました（クズ）\n\nエイリアス: chord, n2c",
         "usage": "%command% C E G\n%command% E G B"
+      },
+      {
+        "command": "chord2notes",
+        "description": "コード名から構成音を出力してくれます\n※まだ開発/実験段階です 不具合が死ぬほどあるので出力内容を過信しすぎないようお願いします\n\nエイリアス: notes, c2n",
+        "usage": "%command% Cm\n%command% D#aug"
       }
     ]
   },
