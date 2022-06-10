@@ -4,3 +4,4 @@ dev_run.py
 .vscode
 **/discord
 **/__pycache__
+servers
