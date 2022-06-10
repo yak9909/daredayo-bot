@@ -1,4 +1,6 @@
 dev_config.json
 dev_run.py
 .idea
-__pycache__
+.vscode
+**/discord
+**/__pycache__

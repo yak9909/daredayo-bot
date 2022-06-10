@@ -92,7 +92,7 @@ class Archive():
 
     @is_available
     def get_timestamp(self):
-        timestamp = urllib.parse.urlparse(self.url).path.split("/")[2]
+        timestamp = urllib.parse.urlparse(self.url).path.split("/")[2][:8]
         return timestamp
 
     @is_available

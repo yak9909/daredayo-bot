@@ -40,8 +40,9 @@ class Tools(commands.Cog):
             #async with ctx.channel.typing():
             #    info = archive.get_info()
 
-            embed = discord.Embed(title="アーカイブが見つかりました！", description=f'[アーカイブURL]({archive.url})')
+            embed = discord.Embed(title="アーカイブが見つかりました！", description=f'[{archive.get_video_title()}]({archive.url})')
             await ctx.send(embed=embed)
+            await ctx.send(archive.get_channel_name())
         else:
             await ctx.send("アーカイブは見つかりませんでした…")
 
@@ -197,7 +198,7 @@ class Tools(commands.Cog):
                 "arch": ["armbe"]
             }
             res = requests.post("https://armconverter.com/api/convert", json=params)
-            await message.channel.send(json.loads(res.text)["asm"]["armbe"][1])
+            await message.reply(json.loads(res.text)["asm"]["armbe"][1], mention_author=False)
 
         command = self.bot.command_prefix + "armtohex"
         if message.content.startswith(command):

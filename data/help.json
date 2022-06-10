@@ -15,7 +15,7 @@
       {
         "command": "archive",
         "description": "YouTube でアクセスできなくなった動画のアーカイブを検索します\n見つからない事もあるのでご注意ください",
-        "usage": "%command% https://youtu.be/_9R1HNtNJFE"
+        "usage": "%command% https://youtu.be/JkxeFwwSSAs"
       },
       {
         "command": "purge",

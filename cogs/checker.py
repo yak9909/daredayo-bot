@@ -30,6 +30,21 @@ async def get_quoter_webhook(channel):
 class Checker(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        
+        self.kusodomains_map = {
+            "https://soude.su/"                     : r'そう(です|(わ|だ)?よ)',
+            "https://imanona.si/"                   : r'(いま|今)の(な|無)し',
+            "https://mouyuru.site/"                 : r'(もう)?(ゆる|許)して(ください)?',
+            "https://iyado.su/"                     : r'(や|いや|嫌)(だ|です|どす)',
+            "https://nasa.so/"                      : r'(な|無)さそう',
+            "https://otsu.care/"                    : r'(乙|(お(つか|疲)れ(さま|様)?)|おつ|o2|02)',
+            "https://yoroshiku.onegai.shim.earth/"  : r'((よろ|宜)(し(く|こ)(お(ねが|願)いします)?)?|4649)',
+            "https://sounanokamoshiremasen.ga/"     : r'そう(なの)?(かも(しれ(ない(の)?|ません|ん)((だ)?が|けど)))',
+            "https://ohayougozaima.su/"             : r'(お(はよ(う|ー)?|早う)(ございます)?|(お|起)き(た|ました))',
+            "https://soujyanai.ga/"                 : r'((ちが|違)う|そうじゃ(な(い(が)?|くて(さ|ね)?|ね(え|ぇ|ー)(よ)?)))',
+            "https://sorehako.ml/"                  : r'(それは)?(こま|困)る((ん|の)(だ|です)(が|けど))?',
+            "https://shinchokuda.me/"               : r'(しんちょく|進捗)(だめ|ダメ)です(。)?'
+        }
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -86,6 +101,10 @@ class Checker(commands.Cog):
         
             # ランダムで煽る
             await message.reply(aori_msg)
+            
+        for k,v in self.kusodomains_map.items():
+            if re.match(v, message.content):
+                await message.channel.send(k)
 
         if message.content.startswith(self.bot.command_prefix):
             return
@@ -137,7 +156,7 @@ class Checker(commands.Cog):
                                 #async with channel.typing():
                                 #    info = archive.get_info()
 
-                                embed = discord.Embed(title="アーカイブが見つかりました！", description=f'[アーカイブURL]({archive.url})')
+                                embed = discord.Embed(title="アーカイブが見つかりました！", description=f'[{archive.get_video_title()}]({archive.url})')
                                 await channel.send(embed=embed)
                             else:
                                 await channel.send("アーカイブは見つかりませんでした…")
