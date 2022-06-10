@@ -42,6 +42,41 @@ def load_cogs():
     return Initial_Cogs
 
 
+def check_exist(dir, root="./data"):
+    if dir:
+        d = dir.split("/")
+        dx = ""
+        for x in d:
+            dx += x + "/"
+            if not os.path.exists(f"{root}/{dx}"):
+                print(f"directory '{x}' is not found.\ncreate '{root}/{dx}'")
+                os.mkdir(f"{root}/{dx}")
+
+
+def data_check(dir, root="./data"):
+    def _data_check(func):
+        def wrapper(*args, **kwargs):
+            check_exist(dir, root)
+            return func(*args, **kwargs)
+        return wrapper
+    return _data_check
+
+
+def format_toggle(text):
+    toggle_map = {
+    "enable": ["enable", "on", "true"],
+    "disable": ["disable", "off", "false"]
+    }
+    for k,v in toggle_map.items():
+        for x in v:
+            if text.lower() == x:
+                if k == "enable":
+                    return True
+                elif k == "disable":
+                    return False
+    return None
+
+
 app = Flask(__name__)
 
 

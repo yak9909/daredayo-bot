@@ -5,6 +5,7 @@ import re
 import requests
 from cogs import tools, help
 from modules import ytpy
+from modules.server import Server
 
 
 # 文字列内からURLを抽出
@@ -56,6 +57,10 @@ class Checker(commands.Cog):
 
         if message.author.bot:
             return
+        
+        srv = Server(message.guild.id)
+        if srv.read_config("reply", "kusodomain") is None:
+            srv.write_config({"reply": {"kusodomain": True}})
 
         check_text = message.content
         for i in find_url(check_text):
@@ -101,10 +106,11 @@ class Checker(commands.Cog):
         
             # ランダムで煽る
             await message.reply(aori_msg)
-            
-        for k,v in self.kusodomains_map.items():
-            if re.match(v, message.content):
-                await message.channel.send(k)
+        
+        if srv.read_config("reply", "kusodomain"):
+            for k,v in self.kusodomains_map.items():
+                if re.match(v, message.content):
+                    await message.channel.send(k)
 
         if message.content.startswith(self.bot.command_prefix):
             return
