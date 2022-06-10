@@ -22,7 +22,7 @@ class Tools(commands.Cog):
 
     # YouTube でアクセスできなくなった動画のアーカイブを検索
     @commands.command()
-    async def archive(self, ctx: commands.Context, video):
+    async def archive(self, ctx: commands.Context, video = ""):
         if re.match(r'^https?://', video):
             if not ytpy.is_youtube(video):
                 await ctx.send("YouTube動画のURLを入力してください！")
@@ -222,8 +222,9 @@ class Tools(commands.Cog):
                 if [x for x in conv_conds if v.startswith(x)]:
                     pc = 2
                     
-                    reps = [[f".{b}", f'[pc, #{((len(programs)+a+1)-(i+1+pc))*4}]'] for a,b in enumerate(labels.keys()) if f".{b}" in v][-1]
-                    v = v.replace(reps[0], reps[1])
+                    reps = [[f":{b}", f'[pc, #{((len(programs)+a+1)-(i+1+pc))*4}]'] for a,b in enumerate(labels.keys()) if f":{b}" in v]
+                    if reps:
+                        v = v.replace(reps[-1][0], reps[-1][1])
                 results.insert(-len(labels),v)
 
             params = {
@@ -232,7 +233,7 @@ class Tools(commands.Cog):
                 "arch": ["armbe"]
             }
             res = requests.post("https://armconverter.com/api/convert", json=params)
-            await message.channel.send(json.loads(res.text)["hex"]["armbe"][1])
+            await message.reply(json.loads(res.text)["hex"]["armbe"][1], mention_author=False)
 
 
 # コグをセットアップするために必要

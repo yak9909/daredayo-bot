@@ -4,13 +4,13 @@
     "commands": [
       {
         "command": "hextoarm",
-        "description": "機械語(16進数)をARM Little Endianに変換します\n(armconverterのAPIを使用)",
+        "description": "機械語(16進数)をARM Big Endianに変換します\n(armconverterのAPIを使用)",
         "usage": "%command% E3A01002"
       },
       {
         "command": "armtohex",
-        "description": "ARM Little Endianを機械語(16進数)に変換します\n(armconverterのAPIを使用)",
-        "usage": "%command%\nvar addr1 = 0x100000\nldr r0, .addr1\nadd r0, #0x5"
+        "description": "ARM Big Endianを機械語(16進数)に変換します\n(armconverterのAPIを使用)",
+        "usage": "%command%\nvar addr1 = 0x100000\nldr r0, :addr1\nadd r0, #0x5"
       },
       {
         "command": "archive",
