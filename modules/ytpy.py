@@ -16,7 +16,11 @@ def url2id(video_url: str):
     video_id = None
     parsed = urllib.parse.urlparse(video_url)
     if parsed.netloc == "www.youtube.com":
-        video_id = urllib.parse.parse_qs(parsed.query)["v"][0]
+        query = urllib.parse.parse_qs(parsed.query).get("v")
+        if query:
+            video_id = query[0]
+        else:
+            return None
     else:
         video_id = parsed.path.split("/")[-1]
 
@@ -32,6 +36,8 @@ def is_youtube(url):
 class Video:
     def __init__(self, video):
         self.id = url2id(video) if is_youtube(video) else video
+        if self.id is None:
+            return None
         self.url = "https://youtu.be/" + self.id
         self.oembed_url = "https://www.youtube.com/oembed?url=http://www.youtube.com/watch?v=" + self.id
         self.oembed_response = requests.get(self.oembed_url)
@@ -92,8 +98,10 @@ class Archive():
 
     @is_available
     def get_timestamp(self):
-        timestamp = urllib.parse.urlparse(self.url).path.split("/")[2][:8]
-        return timestamp
+        if self.url:
+            timestamp = urllib.parse.urlparse(self.url).path.split("/")[2]#[:8]
+            return timestamp
+        return None
 
     @is_available
     @using_html
@@ -107,10 +115,21 @@ class Archive():
     @using_html
     def get_channel_name(self):
         channel_name = re.findall(r'(?<=\+json">).*?(?=</script>)', self.html.replace('\n', ''))
-        channel_url = json.loads(channel_name[0])["itemListElement"][0]["item"]["@id"]
-        channel_name = json.loads(channel_name[0])["itemListElement"][0]["item"]["name"]
-        return channel_name
+        try:
+            channel_url = json.loads(channel_name[0])["itemListElement"][0]["item"]["@id"]
+            channel_name = json.loads(channel_name[0])["itemListElement"][0]["item"]["name"]
+            return channel_name
+        except IndexError:
+            return None
+        except Exception as e:
+            print(e)
+            return None
 
     def get_archive(self):
+        archive_url = f"http://archive.org/wayback/available?url=http://www.youtube.com/watch?v={video.id}"
+        r = requests.get(archive_url)
+        if not r.json().get("archived_snapshots"):
+            return None
+        
         archive = f"https://web.archive.org/web/2oe_/http://wayback-fakeurl.archive.org/yt/{self.id}"
         return get_redirect_url(archive)

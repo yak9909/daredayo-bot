@@ -22,32 +22,6 @@ class Tools(commands.Cog):
     async def armtohex(self, ctx: commands.Context):
         pass
 
-    # YouTube でアクセスできなくなった動画のアーカイブを検索
-    @commands.command()
-    async def archive(self, ctx: commands.Context, video = ""):
-        if re.match(r'^https?://', video):
-            if not ytpy.is_youtube(video):
-                await ctx.send("YouTube動画のURLを入力してください！")
-                return
-
-        video = ytpy.Video(video)
-        await ctx.send(f"{video.url} のアーカイブを取得します…")
-
-        # アーカイブの取得
-        async with ctx.channel.typing():
-            archive = ytpy.Archive(video.url)
-
-        if archive.url:
-            # 動画情報の取得
-            #async with ctx.channel.typing():
-            #    info = archive.get_info()
-
-            embed = discord.Embed(title="アーカイブが見つかりました！", description=f'[{archive.get_video_title()}]({archive.url})')
-            await ctx.send(embed=embed)
-            await ctx.send(archive.get_channel_name())
-        else:
-            await ctx.send("アーカイブは見つかりませんでした…")
-
     # purge
     @commands.command()
     async def purge(self, ctx: commands.Context, arg1, arg2=None):
@@ -70,10 +44,10 @@ class Tools(commands.Cog):
                         
                         ms1 = await ctx.channel.fetch_message(arg1)
                         ms2 = await ctx.channel.fetch_message(arg2)
-                        messages = [msg async for msg in ctx.channel.history(before=ms1, after=ms2)] + [ms1, ms2]
+                        messages = [msg async for msg in ctx.channel.history(limit=500, before=ms1, after=ms2)] + [ms1, ms2]
                         
-                        await ctx.message.delete()
                         deleted = await ctx.channel.delete_messages(messages)
+                        await ctx.message.delete()
                         await ctx.channel.send(f"{len(messages)}個のメッセージを削除しました！\nこのメッセージは5秒後に削除されます", delete_after=5)
                         
                     except discord.errors.NotFound:

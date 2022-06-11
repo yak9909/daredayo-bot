@@ -2,6 +2,7 @@ import json
 import os
 import threading
 from flask import Flask, render_template
+import re
 
 
 def load_config() -> dict:
@@ -75,6 +76,16 @@ def format_toggle(text):
                 elif k == "disable":
                     return False
     return None
+
+
+def find_url(text):
+    url = re.findall(r'https?://[\w/:%#\$&\?\(\)~\.=\+\-]+', text)
+    return url 
+
+
+def find_token(text):
+    token = re.findall(r'[M-Z][A-Za-z\d]{23}\.[\w-]{6}\.[\w-]{27}', text)
+    return token
 
 
 app = Flask(__name__)

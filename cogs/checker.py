@@ -4,20 +4,8 @@ import random
 import re
 import requests
 from cogs import tools, help
-from modules import ytpy
+from modules import yktool, ytpy
 from modules.server import Server
-
-
-# 文字列内からURLを抽出
-def find_url(text):
-    # findall() 正規表現に一致する文字列を検索する
-    url = re.findall(r'https?://[\w/:%#\$&\?\(\)~\.=\+\-]+', text)
-    return url 
-
-
-def find_token(text):
-    token = re.findall(r'[M-Z][A-Za-z\d]{23}\.[\w-]{6}\.[\w-]{27}', text)
-    return token
 
 
 async def get_quoter_webhook(channel):
@@ -51,7 +39,7 @@ class Checker(commands.Cog):
     async def on_message(self, message: discord.Message):
 
         # TOKENの削除
-        if find_token(message.content):
+        if yktool.find_token(message.content):
             await message.delete()
             await message.channel.send(f"{message.author.mention} Tokenが検出されたので削除しました。")
 
@@ -63,7 +51,7 @@ class Checker(commands.Cog):
             srv.write_config({"reply": {"kusodomain": True}})
 
         check_text = message.content
-        for i in find_url(check_text):
+        for i in yktool.find_url(check_text):
             check_text = check_text.replace(i, "")
 
         matches = re.findall(r'(aviutl.exe|aviutl|aviutil)', check_text, flags=re.IGNORECASE)
@@ -118,15 +106,10 @@ class Checker(commands.Cog):
         if message.content == "<@881540558236024843>":
             await message.channel.send(f"helpコマンドは `{self.bot.command_prefix}help` と送信する事で実行できます", delete_after=8)
 
-        if url := find_url(message.content):
+        if url := yktool.find_url(message.content):
             if len(url) == 1 and "discord.com/channels/" in url[0]:
                 if str(message.guild.id) == url[0].split("/")[-3]:
                     await message.add_reaction("⤵️")
-
-        if url := find_url(message.content):
-            if len(url) == 1 and ytpy.is_youtube(url[0]):
-                if not ytpy.Video(url[0]).is_available():
-                    await message.add_reaction("🔍")
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
@@ -143,33 +126,10 @@ class Checker(commands.Cog):
 
         if search_emoji and message.author.id == payload.user_id:
             if [x async for x in search_emoji.users() if x.id == self.bot.user.id]:
-            
-                # アクセスが出来なくなったYouTube動画のアーカイブ検索
-                if str(payload.emoji) == "🔍":
-                    if url := find_url(message.content):
-                        if len(url) == 1 and ytpy.is_youtube(url[0]):
-                            video = ytpy.Video(url[0])
-
-                            await message.clear_reaction("🔍")
-                            await message.reply(f"{video.url} のアーカイブを取得します…", mention_author=False)
-
-                            # アーカイブの取得
-                            async with channel.typing():
-                                archive = ytpy.Archive(video.url)
-
-                            if archive.url:
-                                # 動画情報の取得
-                                #async with channel.typing():
-                                #    info = archive.get_info()
-
-                                embed = discord.Embed(title="アーカイブが見つかりました！", description=f'[{archive.get_video_title()}]({archive.url})')
-                                await channel.send(embed=embed)
-                            else:
-                                await channel.send("アーカイブは見つかりませんでした…")
         
                 # メッセージの引用
                 if str(payload.emoji) == "⤵️":
-                    if url := find_url(message.content):
+                    if url := yktool.find_url(message.content):
                         async with message.channel.typing():
                             await message.clear_reaction("⤵️")
                             chid = url[0].split("/")[-2]
