@@ -8,14 +8,7 @@ class Server:
     def __init__(self, guild_id) -> None:
         self.id = guild_id
         self.path = f"data/servers/{self.id}"
-        
-        x = self.load_file("config.json", "r")
-        if os.stat(f"{self.path}/config.json").st_size > 0:
-            self.config = json.load(x)
-        else:
-            self.config = {}
-        x.close()
-        
+        self.config = self.load_config()
     
     def require(dir=[]):
         def _require(func):
@@ -43,19 +36,25 @@ class Server:
             self.create_file(fn)
             return self.load_file(fn, mode)
     
+    def load_config(self):
+        config = {}
+        x = self.load_file("config.json", "r")
+        if os.stat(f"{self.path}/config.json").st_size > 0:
+            config = json.load(x)
+        x.close()
+        return config
+    
     def update_config(self):
         json.dump(self.config, self.load_file("config.json", "w+"), indent=4, ensure_ascii=False)
     
     def read_config(self, *args):
-        config = self.config
+        config = self.config = self.load_config()
         for key in args:
-            if config := config.get(key):
-                continue
-            else:
-                return None
+            config = config.get(key)
+            if config is None:
+                break
             
         return config
-        
     
     def write_config(self, value: dict):
         self.config.update(value)

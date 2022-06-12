@@ -21,7 +21,8 @@ class Configure(commands.Cog):
                            f"現在 {srv.read_config('reply', 'kusodomain')} に設定されています")
             return
         
-        if (value := yktool.format_toggle(value)) is None:
+        value = yktool.format_toggle(value)
+        if value is None:
             await ctx.reply("設定値は `True` か `False` にしてください")
             return
         
@@ -32,6 +33,11 @@ class Configure(commands.Cog):
     async def kusodomain_error(self, ctx: commands.Context, error: commands.errors):
         if isinstance(error, commands.errors.BadArgument):
             await ctx.reply("設定値は `True` か `False` にしてください")
+    
+    @commands.command()
+    async def testconf(self, ctx: commands.Context, key):
+        srv = Server(ctx.guild.id)
+        await ctx.send(f"{srv.read_config(key)}")
 
 
 def setup(bot):

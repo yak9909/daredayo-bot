@@ -65,8 +65,8 @@ def data_check(dir, root="./data"):
 
 def format_toggle(text):
     toggle_map = {
-    "enable": ["enable", "on", "true"],
-    "disable": ["disable", "off", "false"]
+        "enable": ["enable", "on", "true"],
+        "disable": ["disable", "off", "false"]
     }
     for k,v in toggle_map.items():
         for x in v:
