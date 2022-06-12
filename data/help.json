@@ -21,6 +21,22 @@
         "command": "purge",
         "description": "渡された引数に従ってメッセージを削除していきます bot開発者のみ有効",
         "usage": "%command% (<メッセージ削除数> | <削除開始メッセージID> <削除終了メッセージID>)\n\n%command% 5\n最後のメッセージから 5つのメッセージまでを削除\n\n%command% 1234 5678\nIDが1234のメッセージから IDが5678のメッセージまでを削除"
+      }
+    ]
+  },
+
+  "test-commands": {
+    "description": "開発段階のコマンドやテスト用コマンド (メモ用)",
+    "commands": [
+      {
+        "command": "videoinfo",
+        "description": "アクセス可能なYouTube動画の情報を確認できます（一部のみ）",
+        "usage": "%command% https://youtu.be/DO2ut5Nd8mU"
+      },
+      {
+        "command": "gettweet",
+        "description": "ユーザー名とツイート内容を取得します",
+        "usage": "%command% https://twitter.com/yak868/status/1533937615946145792"
       },
       {
         "command": "notes2chord",
@@ -34,7 +50,7 @@
       }
     ]
   },
-  "Test": {
+  "devtest": {
     "description": "ちんぽちんぽうんちんぽ",
     "commands": [
       {

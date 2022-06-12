@@ -41,11 +41,14 @@ class YouTube(commands.Cog):
     async def archive(self, ctx: commands.Context, video = ""):
         await search_archive(ctx.message, video)
     
-    @commands.command()
-    async def teest(self, ctx: commands.Context, video = "bb"):
-        archive_url = f"http://archive.org/wayback/available?url=http://www.youtube.com/watch?v={video}"
-        r = requests.get(archive_url)
-        await ctx.send(r.content)
+    @commands.command(name="videoinfo")
+    async def get_video_info(self, ctx: commands.Context, url):
+        video = ytpy.Video(url)
+        video_info = video.get_video_info()
+        embed = discord.Embed(title=video_info["title"], description=f'アップローダー: [{video_info["author_name"]}]({video_info["author_url"]})', url=video.url)
+        embed.set_thumbnail(url=video_info["thumbnail_url"])
+        
+        await ctx.send(embed=embed)
     
     @commands.Cog.listener()
     async def on_message(self, message):

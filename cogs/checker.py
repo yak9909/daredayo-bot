@@ -47,8 +47,6 @@ class Checker(commands.Cog):
             return
         
         srv = Server(message.guild.id)
-        if srv.read_config("reply", "kusodomain") is None:
-            srv.write_config({"reply": {"kusodomain": True}})
 
         check_text = message.content
         for i in yktool.find_url(check_text):
@@ -94,14 +92,17 @@ class Checker(commands.Cog):
         
             # ランダムで煽る
             await message.reply(aori_msg)
+
+        if message.content.startswith(self.bot.command_prefix):
+            return
+
+        if srv.read_config("reply", "kusodomain") is None:
+            srv.write_config({"reply": {"kusodomain": True}})
         
         if srv.read_config("reply", "kusodomain"):
             for k,v in self.kusodomains_map.items():
                 if re.match(v, message.content):
                     await message.channel.send(k)
-
-        if message.content.startswith(self.bot.command_prefix):
-            return
 
         if message.content == "<@881540558236024843>":
             await message.channel.send(f"helpコマンドは `{self.bot.command_prefix}help` と送信する事で実行できます", delete_after=8)

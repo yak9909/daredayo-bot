@@ -10,17 +10,7 @@ import re
 
 class Tools(commands.Cog):
     def __init__(self, bot):
-        self.bot = bot
-
-    # 機械語(16進数) から ARM Little Endian に変換 (with ARM Converter API)
-    @commands.command()
-    async def hextoarm(self, ctx: commands.Context):
-        pass
-
-    # ARM Little Endian から 機械語(16進数) に変換 (with ARM Converter API)
-    @commands.command()
-    async def armtohex(self, ctx: commands.Context):
-        pass
+        self.bot: commands.Bot = bot
 
     # purge
     @commands.command()
@@ -70,20 +60,13 @@ class Tools(commands.Cog):
             f"{self.bot.command_prefix}purge (<メッセージ削除数> | <削除開始メッセージID> <削除終了メッセージID>)"
             "\n```"
         )
-    
-    @commands.command()
-    async def test(self, ctx: commands.Context, url):
-        video = ytpy.Video(url)
-        video_info = video.get_video_info()
-        embed = discord.Embed(title=video_info["title"], description=f'アップローダー: [{video_info["author_name"]}]({video_info["author_url"]})', url=video.url)
-        embed.set_thumbnail(url=video_info["thumbnail_url"])
-        await ctx.send(embed=embed)
 
-    @commands.command()
-    async def test2(self, ctx: commands.Context, url):
+    @commands.command(name="gettweet")
+    async def get_tweet_oEmbed(self, ctx: commands.Context, url):
         oEmbed = "https://publish.twitter.com/oembed?url=" + url
         res = requests.get(oEmbed).json()
-        embed = discord.Embed(title=res["author_name"], description=res["html"], url=res["author_url"])
+        tweet = re.findall(r'<p .*>(.*?)</p>', res["html"])
+        embed = discord.Embed(title=res["author_name"], description=tweet[0], url=res["author_url"])
         await ctx.send(embed=embed)
 
     @commands.command(aliases=["n2c", "chord"])
@@ -142,100 +125,6 @@ class Tools(commands.Cog):
             result.append(str(i).replace(str(i), chord_reference["note"][str(i)][0]))
 
         await ctx.send(" ".join(result))
-    
-    @commands.group()
-    async def config(self, ctx: commands.Context):
-        if not ctx.invoked_subcommand:
-            await ctx.send("y/config kusodomain")
-    
-    @config.command()
-    async def kusodomain(self, ctx: commands.Context, value = None):
-        srv = Server(ctx.guild.id)
-        if value is None:
-            await ctx.send(f"メッセージに対してクソドメインを送りつける迷惑機能です\n"
-                           f"現在 {srv.read_config('reply', 'kusodomain')} に設定されています")
-            return
-        
-        if (value := yktool.format_toggle(value)) is None:
-            await ctx.reply("設定値は `True` か `False` にしてください")
-            return
-        
-        srv.write_config({"reply": {"kusodomain": value}})
-        await ctx.reply(f"クソドメインの送りつけを" + ("有効" if value else "無効") + "にしました")
-    
-    @kusodomain.error
-    async def kusodomain_error(self, ctx: commands.Context, error: commands.errors):
-        if isinstance(error, commands.errors.BadArgument):
-            await ctx.reply("設定値は `True` か `False` にしてください")
-
-    @commands.command()
-    async def reload(self, ctx: commands.Context):
-        if yktool.is_moderator(ctx.author.id):
-            # コグ読み込み
-            for cog in yktool.load_cogs():
-                self.bot.reload_extension(cog)
-            await ctx.message.add_reaction("✅")
-        else:
-            await ctx.message.add_reaction("❓")
-    
-    @reload.error
-    async def reload_error(self, ctx: commands.Context, error: discord.ext.commands.CommandError):
-        await ctx.message.add_reaction("❌")
-        print(error)
-
-    # メッセージを受信すると呼び出されるメソッド
-    @commands.Cog.listener()
-    async def on_message(self, message: discord.Message):
-        # 送信主がbotならreturnする
-        if message.author.bot:
-            return
-        
-        command = self.bot.command_prefix + "hextoarm"
-        if message.content.startswith(command):
-            val = message.content[len(command)+1:]
-            params = {
-                "hex": val,
-                "offset": "",
-                "arch": ["armbe"]
-            }
-            res = requests.post("https://armconverter.com/api/convert", json=params)
-            await message.reply(json.loads(res.text)["asm"]["armbe"][1], mention_author=False)
-
-        command = self.bot.command_prefix + "armtohex"
-        if message.content.startswith(command):
-            val = message.content[len(command)+1:]
-
-            labels = {}
-            conv_conds = ["ldr", "str"]
-            programs = []
-            results = []
-
-            for i,v in enumerate(val.split("\n")):
-                if v.startswith("var"):
-                    label = v[4:].replace(" ", "").split("=")
-                    value = format(int(label[1], 16), "08x")
-                    results.append(f".word 0x{value}")
-                    labels[label[0]] = value
-                else:
-                    if not v == "":
-                        programs.append(v)
-
-            for i,v in enumerate(programs):
-                if [x for x in conv_conds if v.startswith(x)]:
-                    pc = 2
-                    
-                    reps = [[f":{b}", f'[pc, #{((len(programs)+a+1)-(i+1+pc))*4}]'] for a,b in enumerate(labels.keys()) if f":{b}" in v]
-                    if reps:
-                        v = v.replace(reps[-1][0], reps[-1][1])
-                results.insert(-len(labels),v)
-
-            params = {
-                "asm": "\n".join(results),
-                "offset": "",
-                "arch": ["armbe"]
-            }
-            res = requests.post("https://armconverter.com/api/convert", json=params)
-            await message.reply(json.loads(res.text)["hex"]["armbe"][1], mention_author=False)
 
 
 # コグをセットアップするために必要

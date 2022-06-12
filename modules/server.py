@@ -30,6 +30,7 @@ class Server:
         if dir := "/".join(fn.split("/")[:-1]):
             yktool.check_exist(dir, self.path)
         
+        print(f"create file '{self.path}/{fn}'")
         f = open(f"{self.path}/{fn}", mode="w+", encoding="utf-8")
         f.close()
     
