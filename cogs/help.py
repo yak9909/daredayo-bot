@@ -18,8 +18,9 @@ class HelpPage(discord.ui.View):
 
 
 class HelpDropdown(discord.ui.Select):
-    def __init__(self, references):
+    def __init__(self, message: discord.Message, references):
         self.references = references
+        self.message = message
         self.selected = None
 
         options = []
@@ -29,6 +30,10 @@ class HelpDropdown(discord.ui.Select):
         super().__init__(placeholder="カテゴリーを選択してください…", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
+        if not self.message.author.id == interaction.user.id:
+            await interaction.response.send_message("他人のhelpコマンドは操作できません", ephemeral=True)
+            return
+        
         self.selected = self.references[self.values[0]]
         self.placeholder = self.values[0]
         self.view.current_page = 0
@@ -37,8 +42,9 @@ class HelpDropdown(discord.ui.Select):
 
 
 class HelpView(discord.ui.View):
-    def __init__(self, help_path, max_items=3):
+    def __init__(self, message: discord.Message, help_path, max_items=3):
         super().__init__()
+        self.message = message
 
         self.references = json.load(open(help_path, mode="r+", encoding="utf-8"))
 
@@ -49,18 +55,27 @@ class HelpView(discord.ui.View):
 
         self.prefix = yktool.load_config()["prefix"]
 
-        self.help_dropdown = HelpDropdown(self.references)
+        self.help_dropdown = HelpDropdown(self.message, self.references)
 
         self.add_item(self.help_dropdown)
 
     @discord.ui.button(label="←", disabled=True)
     async def previous(self, button: discord.ui.Button, interaction: discord.Interaction):
+        if not self.message.author.id == interaction.user.id:
+            await interaction.response.send_message("他人のhelpコマンドは操作できません", ephemeral=True)
+            return
+        
+        await interaction.channel.send(f"interaction.user.id: {interaction.user.id}")
         self.current_page -= 1
         embed = self.update()
         await interaction.message.edit(embed=embed, view=self)
 
     @discord.ui.button(label="→", disabled=True)
     async def next(self, button: discord.ui.Button, interaction: discord.Interaction):
+        if not self.message.author.id == interaction.user.id:
+            await interaction.response.send_message("他人のhelpコマンドは操作できません", ephemeral=True)
+            return
+        
         self.current_page += 1
         embed = self.update()
         await interaction.message.edit(embed=embed, view=self)
@@ -78,10 +93,11 @@ class HelpView(discord.ui.View):
             current_command = self.help_dropdown.selected["commands"][i]
             description = current_command["description"]
             usage = current_command["usage"].replace("%command%", self.prefix + current_command["command"])
+            desc = description.replace("\n", "\n> ")
 
             embed.add_field(
-                name=f'――――――――――――――――\n{self.prefix}{current_command["command"]}',
-                value=f'{description}\n\n__**使い方**__\n```{usage}\n```',
+                name=f'‌\n――――――――――――――――\n**` {self.prefix}{current_command["command"]} `**',
+                value=f'> {desc}\n\n__**使い方**__\n```{usage}\n```',
                 inline=False
             )
 
@@ -115,7 +131,7 @@ class Help(commands.Cog):
             "コマンドのカテゴリーを選択してください"
         )
 
-        category_view = HelpView(self.help_path, self.max_items)
+        category_view = HelpView(ctx.message, self.help_path, self.max_items)
 
         await ctx.send(embed=embed, view=category_view)
 
