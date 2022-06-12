@@ -47,9 +47,22 @@ class Server:
     def update_config(self):
         json.dump(self.config, self.load_file("config.json", "w+"), indent=4, ensure_ascii=False)
     
-    def read_config(self, *args):
+    def init_config(self, default, keys, ignore_check=False):
+        if not ignore_check:
+            if not self.read_config(keys, init=False, default=default) is None:
+                return
+
+        config = default
+        for i in range(len(keys)):
+            config = {keys[len(keys)-1 - i]: config}
+        self.write_config(config)
+    
+    def read_config(self, keys, init=True, default=None):
+        if init:
+            self.init_config(default, keys)
+        
         config = self.config = self.load_config()
-        for key in args:
+        for key in keys:
             config = config.get(key)
             if config is None:
                 break
@@ -57,7 +70,7 @@ class Server:
         return config
     
     def write_config(self, value: dict):
-        self.config.update(value)
+        self.config = yktool.update_z(self.config, value)
         self.update_config()
         
         

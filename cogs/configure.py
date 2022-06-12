@@ -14,11 +14,12 @@ class Configure(commands.Cog):
             await ctx.send("y/config kusodomain")
     
     @config.command()
+    @commands.has_permissions(administrator=True)
     async def kusodomain(self, ctx: commands.Context, value = None):
         srv = Server(ctx.guild.id)
         if value is None:
             await ctx.send(f"メッセージに対してクソドメインを送りつける迷惑機能です\n"
-                           f"現在 {srv.read_config('reply', 'kusodomain')} に設定されています")
+                           f"現在 {srv.read_config(['reply', 'kusodomain'], default=True)} に設定されています")
             return
         
         value = yktool.format_toggle(value)
@@ -33,11 +34,32 @@ class Configure(commands.Cog):
     async def kusodomain_error(self, ctx: commands.Context, error: commands.errors):
         if isinstance(error, commands.errors.BadArgument):
             await ctx.reply("設定値は `True` か `False` にしてください")
+        if isinstance(error, commands.MissingPermissions):
+            await ctx.reply(f"`管理者` 権限が有効なユーザーにのみ実行可能なコマンドです")
     
-    @commands.command()
-    async def testconf(self, ctx: commands.Context, key):
+    @config.command(name="aviutl")
+    @commands.has_permissions(administrator=True)
+    async def aviutl_spellcheck(self, ctx: commands.Context, value = None):
         srv = Server(ctx.guild.id)
-        await ctx.send(f"{srv.read_config(key)}")
+        if value is None:
+            await ctx.send(f"AviUtl の誤表記をゴミクソうざい煽り文で指摘してくるクソ機能です\n"
+                           f"現在 {srv.read_config(['reply', 'aviutl'], default=True)} に設定されています")
+            return
+        
+        value = yktool.format_toggle(value)
+        if value is None:
+            await ctx.reply("設定値は `True` か `False` にしてください")
+            return
+        
+        srv.write_config({"reply": {"aviutl": value}})
+        await ctx.reply(f"AviUtl 誤表記指摘を" + ("有効" if value else "無効") + "にしました")
+    
+    @aviutl_spellcheck.error
+    async def aviutl_error(self, ctx: commands.Context, error: commands.errors):
+        if isinstance(error, commands.errors.BadArgument):
+            await ctx.reply("設定値は `True` か `False` にしてください")
+        if isinstance(error, commands.MissingPermissions):
+            await ctx.reply(f"`管理者` 権限が有効なユーザーにのみ実行可能なコマンドです")
 
 
 def setup(bot):

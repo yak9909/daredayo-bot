@@ -78,6 +78,25 @@ def format_toggle(text):
     return None
 
 
+# Code by zkr. thanks!
+def update_z(ma, mb):
+    ma_keys = ma.keys()
+    mb_keys = mb.keys()
+    
+    for mb_key in mb_keys:
+        if mb_key in ma_keys:
+            val = mb[mb_key]
+            
+            if type(val) == type(ma[mb_key]) == dict:
+                ma[mb_key] = update_z(ma[mb_key], val)
+            else:
+                ma[mb_key] = val
+        else:
+            ma[mb_key] = mb[mb_key]
+    
+    return ma
+
+
 def find_url(text):
     url = re.findall(r'https?://[\w/:%#\$&\?\(\)~\.=\+\-]+', text)
     return url 
