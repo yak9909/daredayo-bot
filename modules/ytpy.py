@@ -126,7 +126,7 @@ class Archive():
             return None
 
     def get_archive(self):
-        archive_url = f"http://archive.org/wayback/available?url=http://www.youtube.com/watch?v={video.id}"
+        archive_url = f"http://archive.org/wayback/available?url=http://www.youtube.com/watch?v={self.id}"
         r = requests.get(archive_url)
         if not r.json().get("archived_snapshots"):
             return None
