@@ -2,6 +2,13 @@ from discord.ext import commands
 import discord
 import requests
 import json
+import re
+
+
+def get_offset(text):
+    offset = re.findall(r'--offset ([0-9,a-z,A-Z]*)', text)
+    offset = offset[0] if offset else ""
+    return offset
 
 
 class ArmConverter(commands.Cog):
@@ -17,6 +24,13 @@ class ArmConverter(commands.Cog):
     @commands.command()
     async def armtohex(self, ctx: commands.Context):
         pass
+    
+    @commands.command(aliases=["cb"])
+    async def calc_branch(self, ctx: commands.Context, from_address, to_address):
+        calc_branch_offset = lambda From, To: ((((To - From) >> 2) - 2) & 0xFFFFFF)
+        branch_arm = hex(calc_branch_offset(int(from_address, 16), int(to_address, 16)))[2:].rjust(8, '0')
+
+        await ctx.send("EA" + branch_arm.upper()[2:])
 
     # メッセージを受信すると呼び出されるメソッド
     @commands.Cog.listener()
@@ -39,6 +53,14 @@ class ArmConverter(commands.Cog):
         command = self.bot.command_prefix + "armtohex"
         if message.content.startswith(command):
             val = message.content[len(command)+1:]
+
+            #offset = re.findall(r'--offset ([0-9,a-z,A-Z]*)', val.split("\n")[0])
+
+            #offset = (val := val.replace(val.split("\n")[0], "")) and offset[0] if offset else ""
+            
+            if offset := get_offset(val.split("\n")[0]):
+                print(offset)
+                val = val.replace(f'--offset {offset}', '')
 
             labels = {}
             conv_conds = ["ldr", "str"]
@@ -64,13 +86,15 @@ class ArmConverter(commands.Cog):
                         v = v.replace(reps[-1][0], reps[-1][1])
                 results.insert(-len(labels),v)
 
+            print(results)
+
             params = {
                 "asm": "\n".join(results),
-                "offset": "",
+                "offset": offset,
                 "arch": ["armbe"]
             }
             res = requests.post("https://armconverter.com/api/convert", json=params)
-            await message.reply(json.loads(res.text)["hex"]["armbe"][1], mention_author=False)
+            arm_msg = await message.reply(json.loads(res.text)["hex"]["armbe"][1], mention_author=False)
 
 
 def setup(bot):
