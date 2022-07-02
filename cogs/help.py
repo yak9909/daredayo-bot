@@ -65,7 +65,6 @@ class HelpView(discord.ui.View):
             await interaction.response.send_message("他人のhelpコマンドは操作できません", ephemeral=True)
             return
         
-        await interaction.channel.send(f"interaction.user.id: {interaction.user.id}")
         self.current_page -= 1
         embed = self.update()
         await interaction.message.edit(embed=embed, view=self)
