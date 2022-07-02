@@ -3,6 +3,7 @@ import urllib.parse
 from bs4 import BeautifulSoup
 import json
 import re
+import subprocess
 
 
 def get_redirect_url(url):
@@ -28,7 +29,7 @@ def url2id(video_url: str):
 
 
 def is_youtube(url):
-    if re.match(r'^https?://(www.youtube.com|youtu.be)/', url):
+    if re.match(r'^(https?://(youtu.be/|www.youtube.com/watch\?v=)[0-9,a-z,A-Z]*)', url):
         return True
     return False
 
@@ -44,6 +45,12 @@ class Video:
 
     def get_video_info(self):
         return self.oembed_response.json() if self.oembed_response.status_code == 200 else None
+    
+    def get_direct_link(self):
+        shorturl_api = "https://is.gd/create.php"
+    
+        direct_link = subprocess.check_output(f'yt-dlp -g "{self.url}" -f "[ext=mp4][height<=700][fps<=30]"')
+        return direct_link.decode("utf-8")
 
     def is_available(self):
         return self.oembed_response.status_code == 200

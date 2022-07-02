@@ -32,6 +32,37 @@ async def search_archive(message: discord.Message, video):
         await message.channel.send("アーカイブは見つかりませんでした…")
 
 
+async def get_direct_video(ctx: commands.Context, url):
+    if not url:
+        if ctx.message.reference:
+        
+            try:
+                reference_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+                url = re.match(r'^(https?://(youtu.be/|www.youtube.com/watch\?v=)[_\-,0-9,a-z,A-Z]*)', reference_msg.content).group()
+            except Exception as e:
+                return -1
+            
+            if not url:
+                return -1
+        else:
+            return -2
+    
+    video = ytpy.Video(url)
+    
+    if video.is_available():
+        direct_link = video.get_direct_link()
+
+        try:
+            res = requests.post("https://is.gd/create.php", {"url": direct_link})
+            shorted_url = re.findall(r'(?<=id="short_url" value=")(.*)(?=" onclick="select_text\(\);")', res.content.decode("utf-8"))
+            return shorted_url[0]
+        except Exception as e:
+            print(e)
+            return -3
+    else:
+        return -4
+
+
 class YouTube(commands.Cog):
     def __init__(self, bot) -> None:
         self.bot: commands.Bot = bot
@@ -49,6 +80,24 @@ class YouTube(commands.Cog):
         embed.set_thumbnail(url=video_info["thumbnail_url"])
         
         await ctx.send(embed=embed)
+    
+    @commands.command(aliases=["2vid", "tovid"])
+    async def tovideo(self, ctx: commands.Context, url = None):
+        msg = await ctx.message.reply("動画のダイレクトリンクを取得中…", mention_author=False)
+        
+        async with ctx.channel.typing():
+            result = await get_direct_video(ctx, url)
+        
+        if result == -1:
+            await msg.edit(content="URLを確認できませんでした…")
+        elif result == -2:
+            await msg.edit(content=f"`{self.bot.command_prefix}tovideo url`\nもしくはYouTube動画のURLを含んだメッセージを返信しながら使用してください")
+        elif result == -3:
+            await msg.edit(content="ダイレクトリンクの取得に問題が発生したようです…\n開発者 (`やくると#6140`) に連絡してください")
+        elif result == -4:
+            await msg.edit(content="URLが有効ではありません")
+        else:
+            await msg.edit(content=result)
     
     @commands.Cog.listener()
     async def on_message(self, message):
