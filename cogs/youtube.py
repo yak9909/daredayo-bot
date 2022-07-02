@@ -81,7 +81,7 @@ class YouTube(commands.Cog):
         
         await ctx.send(embed=embed)
     
-    @commands.command(aliases=["2vid", "tovid"])
+    @commands.command(aliases=["tovid", "2vid"])
     async def tovideo(self, ctx: commands.Context, url = None):
         msg = await ctx.message.reply("動画のダイレクトリンクを取得中…", mention_author=False)
         

@@ -10,7 +10,7 @@
       {
         "command": "armtohex",
         "description": "ARM Big Endianを機械語(16進数)に変換します\n(armconverterのAPIを使用)",
-        "usage": "%command%\nvar addr1 = 0x100000\nldr r0, :addr1\nadd r0, #0x5"
+        "usage": "%command% --offset 0x240000\nvar addr1 = 0x100000\nldr r0, :addr1\nadd r0, #0x5\nbl 0x252000"
       },
       {
         "command": "archive",
@@ -21,6 +21,11 @@
         "command": "purge",
         "description": "渡された引数に従ってメッセージを削除していきます bot開発者のみ有効",
         "usage": "%command% (<メッセージ削除数> | <削除開始メッセージID> <削除終了メッセージID>)\n\n%command% 5\n最後のメッセージから 5つのメッセージまでを削除\n\n%command% 1234 5678\nIDが1234のメッセージから IDが5678のメッセージまでを削除"
+      },
+      {
+        "command": "tovideo",
+        "description": "YouTube URLのダイレクトリンクを送信し\nDiscord上で閲覧できるようにします\n ( URLにアクセスすればダウンロードも可能 )\nちなみにURLを含んだメッセージを返信しても使えます\n\nエイリアス: `tovid`, `2vid`",
+        "usage": "%command% https://youtu.be/_B-8qWxdRf4"
       }
     ]
   },
@@ -40,58 +45,13 @@
       },
       {
         "command": "notes2chord",
-        "description": "構成音からコード名を出力してくれます\nhttps://kkkgg.github.io/chord_finder/index.html からプログラム拝借しました（クズ）\n\nエイリアス: chord, n2c",
+        "description": "構成音からコード名を出力してくれます\nhttps://kkkgg.github.io/chord_finder/index.html からプログラム拝借しました（クズ）\n\nエイリアス: `chord`, `n2c`",
         "usage": "%command% C E G\n%command% E G B"
       },
       {
         "command": "chord2notes",
-        "description": "コード名から構成音を出力してくれます\n※まだ開発/実験段階です 不具合が死ぬほどあるので出力内容を過信しすぎないようお願いします\n\nエイリアス: notes, c2n",
+        "description": "コード名から構成音を出力してくれます\n※まだ開発/実験段階です 不具合が死ぬほどあるので出力内容を過信しすぎないようお願いします\n\nエイリアス: `notes`, `c2n`",
         "usage": "%command% Cm\n%command% D#aug"
-      }
-    ]
-  },
-  "devtest": {
-    "description": "ちんぽちんぽうんちんぽ",
-    "commands": [
-      {
-        "command": "ちんまんこバースト",
-        "description": "ちんまんこをバーストさせる\n※存在しないコマンドです",
-        "usage": "%command%"
-      },
-      {
-        "command": "うんちんちくび",
-        "description": "うんちんをちくび化\n※存在しないコマンドです",
-        "usage": "%command% ちくちくenable"
-      },
-      {
-        "command": "まんちゃんフォーエバー",
-        "description": "まんちゃんをフォーエバーにする\n※存在しないコマンドです",
-        "usage": "%command% on"
-      },
-      {
-        "command": "デッドリーうんこ",
-        "description": "デッドリーなうんこをする\n※存在しないコマンドです",
-        "usage": "%command%"
-      },
-      {
-        "command": "ExtraFinalyギガントちんこ",
-        "description": "すごいちんこ\n※存在しないコマンドです",
-        "usage": "dsdddsdsdsdsds"
-      },
-      {
-        "command": "odadaaaa",
-        "description": "dwadsdads\n※存在しないコマンドです",
-        "usage": "asdsdadsdsds"
-      },
-      {
-        "command": "123132132132131",
-        "description": "12323151531\n※存在しないコマンドです",
-        "usage": "312war32r3rf"
-      },
-      {
-        "command": "213u21u88889888(()()%()%()%",
-        "description": "()%()%(%)(%)()\n※存在しないコマンドです",
-        "usage": "899090hoohooohlhl;;l::;:;:"
       }
     ]
   }
