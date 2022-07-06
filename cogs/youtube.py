@@ -99,6 +99,26 @@ class YouTube(commands.Cog):
         else:
             await msg.edit(content=result)
     
+    @commands.command(aliases=["toaud", "2aud"])
+    async def toaudio(self, ctx: commands.Context, url):
+        if not ytpy.is_youtube(url):
+            await ctx.message.reply("YouTube動画のリンクを入力してください!!", mention_author=False)
+            return
+    
+        msg = await ctx.message.reply("音声のダイレクトリンク(m4a)を取得中…", mention_author=False)
+        
+        async with ctx.channel.typing():
+            video = ytpy.Video(url)
+            if video.is_available():
+                link = video.mp3_direct_link("m4a")
+            else:
+                link = None
+        
+        if link:
+            await msg.edit(content="", embed=discord.Embed(title=f"リンク", url=link))
+        else:
+            await msg.edit(content="動画にアクセスできませんでした")
+    
     @commands.Cog.listener()
     async def on_message(self, message):
         if message.author.bot:
