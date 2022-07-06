@@ -50,7 +50,7 @@ async def get_direct_video(ctx: commands.Context, url):
     video = ytpy.Video(url)
     
     if video.is_available():
-        direct_link = video.get_direct_link()
+        direct_link = video.mp4_direct_link("mp4", 700, 30)
 
         try:
             res = requests.post("https://is.gd/create.php", {"url": direct_link})

@@ -46,8 +46,8 @@ class Video:
     def get_video_info(self):
         return self.oembed_response.json() if self.oembed_response.status_code == 200 else None
     
-    def mp4_direct_link(self):
-        direct_link = subprocess.check_output(f'yt-dlp -g "{self.url}" -f "[ext=mp4][height<=700][fps<=30]"')
+    def mp4_direct_link(self, ext, res, fps):
+        direct_link = subprocess.check_output(f'yt-dlp -g "{self.url}" -f "[ext={ext}][height<={res}][fps<={fps}]"')
         return direct_link.decode("utf-8")
     
     def mp3_direct_link(self, ext):
